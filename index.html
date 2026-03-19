@@ -343,7 +343,6 @@ async function loadOrders() {
   try {
     const data = await api('/positions/orders');
     const orders = data.orders || data.Orders || [];
-    $('orderCount').textContent = orders.length;
     $('orderBody').innerHTML = orders.length === 0
       ? '<tr><td colspan="7" class="empty">暂无挂单</td></tr>'
       : orders.map(o => {
@@ -371,7 +370,6 @@ async function loadClosed() {
   try {
     const data = await api('/positions/closed');
     const closed = data.closedPositions || data.ClosedPositions || data.positions || [];
-    $('closedCount').textContent = closed.length;
     $('closedBody').innerHTML = closed.length === 0
       ? '<tr><td colspan="6" class="empty">今日暂无平仓记录</td></tr>'
       : closed.map(p => {
@@ -391,7 +389,10 @@ async function loadClosed() {
         </tr>`;
       }).join('');
     updateTodayStats(closed);
-  } catch(e) { debugLog('closed error', e.message); }
+  } catch(e) {
+    debugLog('closed error', e.message);
+    debugLog('closed stack', e.stack);
+  }
 }
 
 function formatDuration(sec) {
@@ -466,8 +467,6 @@ async function loadLockouts() {
   try {
     const data = await api('/risk/lockouts');
     const locked = data.lockedAccounts || [];
-    $('lockedCount').textContent = locked.length;
-    $('lockedCount').className = 'value' + (locked.length > 0 ? ' negative' : '');
   } catch(e) { debugLog('lockouts error', e.message); }
 }
 
