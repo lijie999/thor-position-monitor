@@ -141,6 +141,7 @@ tbody tr:hover{background:var(--hover)}
   <div class="tab active" data-tab="positions">持仓</div>
   <div class="tab" data-tab="orders">挂单</div>
   <div class="tab" data-tab="closed">今日已平</div>
+  <div class="tab" data-tab="accounts">账户明细</div>
   <div class="tab" data-tab="connections">连接</div>
   <div class="tab" data-tab="stats">统计</div>
 </div>
@@ -174,6 +175,14 @@ tbody tr:hover{background:var(--hover)}
     <table><thead><tr>
       <th>账户</th><th>合约</th><th>方向</th><th>数量</th><th>入场价</th><th>盈亏</th>
     </tr></thead><tbody id="closedBody"></tbody></table>
+  </div>
+</div>
+
+<div class="panel" id="panel-accounts">
+  <div class="table-wrap">
+    <table><thead><tr>
+      <th>账户</th><th>账户名</th><th>余额</th><th>今日盈亏</th><th>持仓数</th><th>持仓盈亏</th>
+    </tr></thead><tbody id="accountBody"></tbody></table>
   </div>
 </div>
 
@@ -212,6 +221,8 @@ let refreshTimer = null;
 let connectionMap = {};
 let openPnl = 0;
 let closedPnl = 0;
+let lastClosedData = [];
+let lastRunningData = [];
 
 function debugLog(label, data) {
   console.log('[Thor]', label, data);
@@ -313,6 +324,7 @@ async function loadPositions() {
   try {
     const data = await api('/positions/running');
     const pos = data.positions || data.Positions || [];
+    lastRunningData = pos;
     $('openCount').textContent = pos.length;
     let totalPnl = 0;
     $('posBody').innerHTML = pos.length === 0
@@ -370,6 +382,7 @@ async function loadClosed() {
   try {
     const data = await api('/positions/closed');
     const closed = data.closedPositions || data.ClosedPositions || data.positions || [];
+    lastClosedData = closed;
     $('closedBody').innerHTML = closed.length === 0
       ? '<tr><td colspan="6" class="empty">今日暂无平仓记录</td></tr>'
       : closed.map(p => {
@@ -470,6 +483,52 @@ async function loadLockouts() {
   } catch(e) { debugLog('lockouts error', e.message); }
 }
 
+function loadAccountDetails() {
+  try {
+    const acctMap = {};
+    const closedData = lastClosedData || [];
+    const runningData = lastRunningData || [];
+
+    closedData.forEach(p => {
+      const aid = val(p, 'AccountId', 'accountId');
+      if (!aid) return;
+      if (!acctMap[aid]) acctMap[aid] = { name: '', balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
+      acctMap[aid].name = accountName(aid);
+      const bal = Number(val(p, 'AccountBalance', 'accountBalance') || 0);
+      const exitTime = val(p, 'ExitTime', 'exitTime') || '';
+      if (!acctMap[aid]._lastExit || exitTime > acctMap[aid]._lastExit) {
+        acctMap[aid].balance = bal;
+        acctMap[aid]._lastExit = exitTime;
+      }
+      acctMap[aid].closedPnl += Number(val(p, 'NetPnL', 'netPnl', 'pnl', 'PnL') || 0);
+    });
+
+    runningData.forEach(p => {
+      const aid = val(p, 'AccountId', 'accountId');
+      if (!aid) return;
+      if (!acctMap[aid]) acctMap[aid] = { name: '', balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
+      acctMap[aid].name = accountName(aid);
+      acctMap[aid].openPnl += Number(val(p, 'NetPnL', 'netPnl', 'pnl', 'PnL') || 0);
+      acctMap[aid].openCount += 1;
+    });
+
+    const rows = Object.entries(acctMap).sort((a, b) => a[0].localeCompare(b[0]));
+    $('accountBody').innerHTML = rows.length === 0
+      ? '<tr><td colspan="6" class="empty">暂无账户数据</td></tr>'
+      : rows.map(([aid, a]) => {
+        const todayPnl = a.closedPnl + a.openPnl;
+        return `<tr>
+          <td>${aid}</td>
+          <td>${a.name}</td>
+          <td>${a.balance > 0 ? '$' + a.balance.toFixed(2) : '--'}</td>
+          <td class="${pnlClass(todayPnl)}">${pnlText(todayPnl)}</td>
+          <td>${a.openCount}</td>
+          <td class="${pnlClass(a.openPnl)}">${a.openCount > 0 ? pnlText(a.openPnl) : '--'}</td>
+        </tr>`;
+      }).join('');
+  } catch(e) { debugLog('accountDetails error', e.message); }
+}
+
 async function loadStats() {
   try {
     const data = await api('/historical/trades/stats');
@@ -496,6 +555,7 @@ async function loadStats() {
 async function refreshFast() {
   try {
     await loadPositions();
+    loadAccountDetails();
     const netPnl = openPnl + closedPnl;
     const el = $('totalPnl');
     el.textContent = pnlText(netPnl);
@@ -516,6 +576,7 @@ async function refreshAll() {
     await loadOrders();
     await loadClosed();
     await loadLockouts();
+    loadAccountDetails();
     const netPnl = openPnl + closedPnl;
     const el = $('totalPnl');
     el.textContent = pnlText(netPnl);
