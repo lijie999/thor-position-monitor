@@ -83,6 +83,11 @@ tbody tr:hover{background:var(--hover)}
   background:#1a1a2e;font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all}
 .debug-panel.show{display:block}
 
+.more-toggle{text-align:center;padding:6px;color:var(--blue);font-size:12px;cursor:pointer;
+  background:var(--surface);border-bottom:1px solid var(--border)}
+.more-toggle:hover{color:var(--text)}
+.summary-extra{padding-top:0;margin-top:-4px}
+
 @media(max-width:600px){
   .header{flex-direction:column;gap:8px;text-align:center}
   .header .status{justify-content:center;flex-wrap:wrap}
@@ -119,6 +124,8 @@ tbody tr:hover{background:var(--hover)}
   <div class="card"><div class="label">持仓数</div><div class="value" id="openCount">--</div></div>
   <div class="card"><div class="label">总交易数</div><div class="value" id="tradeCount">--</div></div>
   <div class="card"><div class="label">胜率</div><div class="value" id="winRate">--</div></div>
+</div>
+<div class="summary summary-extra" id="summaryExtra" style="display:none">
   <div class="card"><div class="label">盈利因子</div><div class="value" id="profitFactor">--</div></div>
   <div class="card"><div class="label">平均盈/亏</div><div class="value" id="avgWinLoss">--</div></div>
   <div class="card"><div class="label">最大盈/亏</div><div class="value" id="maxWinLoss">--</div></div>
@@ -128,6 +135,7 @@ tbody tr:hover{background:var(--hover)}
   <div class="card"><div class="label">总持仓时间</div><div class="value" id="totalDuration">--</div></div>
   <div class="card"><div class="label">多/空</div><div class="value" id="longShort">--</div></div>
 </div>
+<div class="more-toggle" onclick="toggleMore()"><span id="moreBtn">展开更多 ▼</span></div>
 
 <div class="tabs">
   <div class="tab active" data-tab="positions">持仓</div>
@@ -217,6 +225,18 @@ function toggleDebug() {
   document.getElementById('debugPanel').classList.toggle('show');
 }
 
+function toggleMore() {
+  const el = $('summaryExtra');
+  const btn = $('moreBtn');
+  if (el.style.display === 'none') {
+    el.style.display = '';
+    btn.textContent = '收起 ▲';
+  } else {
+    el.style.display = 'none';
+    btn.textContent = '展开更多 ▼';
+  }
+}
+
 async function api(path) {
   const r = await fetch(API + path, {headers});
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
@@ -286,16 +306,8 @@ function accountName(id) { return connectionMap[id] || id; }
 
 async function loadPositions() {
   try {
-    const data = await api('/positions');
-    const allPos = data.positions || data.Positions || [];
-    if (Array.isArray(allPos) && allPos.length > 0) {
-      debugLog('positions sample[0]', allPos[0]);
-    }
-
-    const runningData = await api('/positions/running');
-    const running = runningData.positions || runningData.Positions || [];
-
-    const pos = running.length > 0 ? running : allPos;
+    const data = await api('/positions/running');
+    const pos = data.positions || data.Positions || [];
     $('openCount').textContent = pos.length;
     let totalPnl = 0;
     $('posBody').innerHTML = pos.length === 0
@@ -477,10 +489,28 @@ async function loadStats() {
   } catch(e) { debugLog('stats error', e.message); }
 }
 
+async function refreshFast() {
+  try {
+    await loadPositions();
+    const netPnl = openPnl + closedPnl;
+    const el = $('totalPnl');
+    el.textContent = pnlText(netPnl);
+    el.className = 'value ' + (netPnl >= 0 ? 'positive' : 'negative');
+    $('apiDot').className = 'dot on';
+    $('lastUpdate').textContent = new Date().toLocaleTimeString('en-US', {hour12:false});
+  } catch(e) {
+    $('apiDot').className = 'dot off';
+    debugLog('fast refresh failed', e.message);
+  }
+}
+
+let slowCount = 0;
 async function refreshAll() {
   try {
-    await loadConnections();
-    await Promise.all([loadPositions(), loadOrders(), loadClosed(), loadLockouts()]);
+    if (slowCount === 0) await loadConnections();
+    await Promise.all([loadPositions(), loadOrders(), loadClosed()]);
+    if (slowCount === 0) await loadLockouts();
+    slowCount = (slowCount + 1) % 30;
     const netPnl = openPnl + closedPnl;
     const el = $('totalPnl');
     el.textContent = pnlText(netPnl);
@@ -493,12 +523,15 @@ async function refreshAll() {
   }
 }
 
+let fastTimer = null;
+let slowTimer = null;
 function toggleAutoRefresh() {
   if ($('autoRefresh').checked) {
-    refreshTimer = setInterval(refreshAll, CONFIG.REFRESH_INTERVAL);
+    fastTimer = setInterval(refreshFast, 1000);
+    slowTimer = setInterval(() => { loadOrders(); loadClosed(); loadLockouts(); }, 10000);
   } else {
-    clearInterval(refreshTimer);
-    refreshTimer = null;
+    clearInterval(fastTimer); fastTimer = null;
+    clearInterval(slowTimer); slowTimer = null;
   }
 }
 
