@@ -531,23 +531,24 @@ function loadAccountDetails() {
 
 async function loadStats() {
   try {
-    const data = await api('/historical/trades/stats');
-    const o = data.overview || {};
-    const d = data.daily || {};
-    const s = data.streaks || {};
+    const d = await api('/historical/trades/stats');
     $('statsGrid').innerHTML = `
-      <div class="stat-card"><div class="label">总交易数</div><div class="value">${o.totalTrades || 0}</div></div>
-      <div class="stat-card"><div class="label">胜率</div><div class="value">${(o.winRate || 0).toFixed(1)}%</div></div>
-      <div class="stat-card"><div class="label">净盈亏</div><div class="value ${pnlClass(o.netPnl || 0)}">${pnlText(o.netPnl || 0)}</div></div>
-      <div class="stat-card"><div class="label">盈亏比</div><div class="value">${(o.profitFactor || 0).toFixed(2)}</div></div>
-      <div class="stat-card"><div class="label">平均盈利</div><div class="value pnl-pos">${pnlText(o.avgWin || 0)}</div></div>
-      <div class="stat-card"><div class="label">平均亏损</div><div class="value pnl-neg">${pnlText(o.avgLoss || 0)}</div></div>
-      <div class="stat-card"><div class="label">最大盈利</div><div class="value pnl-pos">${pnlText(o.largestWin || 0)}</div></div>
-      <div class="stat-card"><div class="label">最大亏损</div><div class="value pnl-neg">${pnlText(o.largestLoss || 0)}</div></div>
-      <div class="stat-card"><div class="label">���胜</div><div class="value">${s.longestWinStreak || 0}</div></div>
-      <div class="stat-card"><div class="label">连亏</div><div class="value">${s.longestLossStreak || 0}</div></div>
-      <div class="stat-card"><div class="label">盈利天数</div><div class="value">${d.profitableDays || 0} / ${d.totalDays || 0}</div></div>
-      <div class="stat-card"><div class="label">日均盈亏</div><div class="value ${pnlClass(d.avgDailyPnl || 0)}">${pnlText(d.avgDailyPnl || 0)}</div></div>
+      <div class="stat-card"><div class="label">总交易数</div><div class="value">${d.totalTrades || 0}</div></div>
+      <div class="stat-card"><div class="label">胜率</div><div class="value">${(d.winRate || 0).toFixed(1)}%</div></div>
+      <div class="stat-card"><div class="label">净盈亏</div><div class="value ${pnlClass(d.netPnl || 0)}">${pnlText(d.netPnl || 0)}</div></div>
+      <div class="stat-card"><div class="label">盈亏比</div><div class="value">${(d.profitFactor || 0).toFixed(2)}</div></div>
+      <div class="stat-card"><div class="label">平均盈利</div><div class="value pnl-pos">${pnlText(d.avgWin || 0)}</div></div>
+      <div class="stat-card"><div class="label">平均亏损</div><div class="value pnl-neg">${pnlText(d.avgLoss || 0)}</div></div>
+      <div class="stat-card"><div class="label">最大盈利</div><div class="value pnl-pos">${pnlText(d.bestTrade || 0)}</div></div>
+      <div class="stat-card"><div class="label">最大亏损</div><div class="value pnl-neg">${pnlText(d.worstTrade || 0)}</div></div>
+      <div class="stat-card"><div class="label">连胜</div><div class="value">${d.consecutiveWins || 0}</div></div>
+      <div class="stat-card"><div class="label">连亏</div><div class="value">${d.consecutiveLosses || 0}</div></div>
+      <div class="stat-card"><div class="label">今日盈亏</div><div class="value ${pnlClass(d.todayPnl || 0)}">${pnlText(d.todayPnl || 0)}</div></div>
+      <div class="stat-card"><div class="label">今日交易</div><div class="value">${d.todayTrades || 0}</div></div>
+      <div class="stat-card"><div class="label">本周盈亏</div><div class="value ${pnlClass(d.weekPnl || 0)}">${pnlText(d.weekPnl || 0)}</div></div>
+      <div class="stat-card"><div class="label">本月盈亏</div><div class="value ${pnlClass(d.monthPnl || 0)}">${pnlText(d.monthPnl || 0)}</div></div>
+      <div class="stat-card"><div class="label">平均持仓</div><div class="value">${(d.avgHoldTime || 0).toFixed(1)}m</div></div>
+      <div class="stat-card"><div class="label">平均交易</div><div class="value ${pnlClass(d.avgTrade || 0)}">${pnlText(d.avgTrade || 0)}</div></div>
     `;
   } catch(e) { debugLog('stats error', e.message); }
 }
