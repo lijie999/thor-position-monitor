@@ -115,11 +115,18 @@ tbody tr:hover{background:var(--hover)}
 </div>
 
 <div class="summary" id="summaryPanel">
-  <div class="card"><div class="label">净盈亏</div><div class="value" id="totalPnl">--</div></div>
+  <div class="card"><div class="label">今日净盈亏</div><div class="value" id="totalPnl">--</div></div>
   <div class="card"><div class="label">持仓数</div><div class="value" id="openCount">--</div></div>
-  <div class="card"><div class="label">挂单数</div><div class="value" id="orderCount">--</div></div>
-  <div class="card"><div class="label">今日已平</div><div class="value" id="closedCount">--</div></div>
-  <div class="card"><div class="label">锁定账户</div><div class="value" id="lockedCount">--</div></div>
+  <div class="card"><div class="label">总交易数</div><div class="value" id="tradeCount">--</div></div>
+  <div class="card"><div class="label">胜率</div><div class="value" id="winRate">--</div></div>
+  <div class="card"><div class="label">盈利因子</div><div class="value" id="profitFactor">--</div></div>
+  <div class="card"><div class="label">平均盈/亏</div><div class="value" id="avgWinLoss">--</div></div>
+  <div class="card"><div class="label">最大盈/亏</div><div class="value" id="maxWinLoss">--</div></div>
+  <div class="card"><div class="label">连续盈/亏</div><div class="value" id="streaks">--</div></div>
+  <div class="card"><div class="label">总盈/亏</div><div class="value" id="grossWinLoss">--</div></div>
+  <div class="card"><div class="label">平均持仓</div><div class="value" id="avgDuration">--</div></div>
+  <div class="card"><div class="label">总持仓时间</div><div class="value" id="totalDuration">--</div></div>
+  <div class="card"><div class="label">多/空</div><div class="value" id="longShort">--</div></div>
 </div>
 
 <div class="tabs">
@@ -195,6 +202,8 @@ const headers = useWorker
   : {'X-API-Key': CONFIG.API_KEY, 'X-API-Secret': CONFIG.API_SECRET};
 let refreshTimer = null;
 let connectionMap = {};
+let openPnl = 0;
+let closedPnl = 0;
 
 function debugLog(label, data) {
   console.log('[Thor]', label, data);
@@ -309,9 +318,7 @@ async function loadPositions() {
           <td><button class="btn sm danger" onclick="closePosition('${acct}','${sym}',${qty})">平仓</button></td>
         </tr>`;
       }).join('');
-    const el = $('totalPnl');
-    el.textContent = pnlText(totalPnl);
-    el.className = 'value ' + (totalPnl >= 0 ? 'positive' : 'negative');
+    openPnl = totalPnl;
   } catch(e) { debugLog('positions error', e.message); }
 }
 
@@ -366,7 +373,76 @@ async function loadClosed() {
           <td class="${pnlClass(pnl)}">${pnlText(pnl)}</td>
         </tr>`;
       }).join('');
+    updateTodayStats(closed);
   } catch(e) { debugLog('closed error', e.message); }
+}
+
+function formatDuration(sec) {
+  if (!sec || sec <= 0) return '0s';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (h > 0) return h + 'h' + (m > 0 ? m + 'm' : '');
+  if (m > 0) return m + 'm' + (s > 0 ? s + 's' : '');
+  return s + 's';
+}
+
+function updateTodayStats(closed) {
+  const trades = closed.map(p => {
+    const pnl = Number(val(p, 'pnl', 'PnL', 'Pnl', 'NetPnL', 'netPnl') || 0);
+    const side = val(p, 'side', 'Side', 'Direction');
+    const entry = val(p, 'EntryTime', 'entryTime', 'openTime', 'OpenTime');
+    const exit = val(p, 'ExitTime', 'exitTime', 'closeTime', 'CloseTime');
+    let dur = 0;
+    if (entry && exit) dur = (new Date(exit) - new Date(entry)) / 1000;
+    return { pnl, side, dur };
+  });
+
+  const total = trades.length;
+  $('tradeCount').textContent = total;
+  closedPnl = trades.reduce((a, t) => a + t.pnl, 0);
+  if (total === 0) return;
+
+  const wins = trades.filter(t => t.pnl > 0);
+  const losses = trades.filter(t => t.pnl < 0);
+  const winPnls = wins.map(t => t.pnl);
+  const lossPnls = losses.map(t => t.pnl);
+  const grossWin = winPnls.reduce((a, b) => a + b, 0);
+  const grossLoss = Math.abs(lossPnls.reduce((a, b) => a + b, 0));
+  const longs = trades.filter(t => normSide(t.side) === 'long').length;
+  const shorts = trades.filter(t => normSide(t.side) === 'short').length;
+  const totalDurSec = trades.reduce((a, t) => a + t.dur, 0);
+  const avgDurSec = totalDurSec / total;
+
+  const wr = (wins.length / total * 100);
+  $('winRate').textContent = wr.toFixed(1) + '%';
+  $('winRate').className = 'value ' + (wr >= 50 ? 'positive' : 'negative');
+
+  const pf = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? '∞' : '0';
+  $('profitFactor').textContent = typeof pf === 'number' ? pf.toFixed(2) : pf;
+  $('profitFactor').className = 'value ' + ((typeof pf === 'number' ? pf : 999) >= 1 ? 'positive' : 'negative');
+
+  const avgW = wins.length > 0 ? grossWin / wins.length : 0;
+  const avgL = losses.length > 0 ? grossLoss / losses.length : 0;
+  $('avgWinLoss').innerHTML = `<span class="pnl-pos">+${avgW.toFixed(0)}</span> / <span class="pnl-neg">-${avgL.toFixed(0)}</span>`;
+
+  const maxW = winPnls.length > 0 ? Math.max(...winPnls) : 0;
+  const maxL = lossPnls.length > 0 ? Math.min(...lossPnls) : 0;
+  $('maxWinLoss').innerHTML = `<span class="pnl-pos">+${maxW.toFixed(0)}</span> / <span class="pnl-neg">${maxL.toFixed(0)}</span>`;
+
+  let curWin = 0, curLoss = 0, maxWinStreak = 0, maxLossStreak = 0;
+  trades.forEach(t => {
+    if (t.pnl > 0) { curWin++; curLoss = 0; maxWinStreak = Math.max(maxWinStreak, curWin); }
+    else if (t.pnl < 0) { curLoss++; curWin = 0; maxLossStreak = Math.max(maxLossStreak, curLoss); }
+    else { curWin = 0; curLoss = 0; }
+  });
+  $('streaks').innerHTML = `<span class="pnl-pos">${maxWinStreak}</span> / <span class="pnl-neg">${maxLossStreak}</span>`;
+
+  $('grossWinLoss').innerHTML = `<span class="pnl-pos">+${grossWin.toFixed(0)}</span> / <span class="pnl-neg">-${grossLoss.toFixed(0)}</span>`;
+
+  $('avgDuration').textContent = formatDuration(avgDurSec);
+  $('totalDuration').textContent = formatDuration(totalDurSec);
+  $('longShort').innerHTML = `<span class="pnl-pos">${longs}</span> / <span class="pnl-neg">${shorts}</span>`;
 }
 
 async function loadLockouts() {
@@ -405,6 +481,10 @@ async function refreshAll() {
   try {
     await loadConnections();
     await Promise.all([loadPositions(), loadOrders(), loadClosed(), loadLockouts()]);
+    const netPnl = openPnl + closedPnl;
+    const el = $('totalPnl');
+    el.textContent = pnlText(netPnl);
+    el.className = 'value ' + (netPnl >= 0 ? 'positive' : 'negative');
     $('apiDot').className = 'dot on';
     $('lastUpdate').textContent = new Date().toLocaleTimeString('en-US', {hour12:false});
   } catch(e) {
