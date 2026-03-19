@@ -188,8 +188,11 @@ tbody tr:hover{background:var(--hover)}
 
 <script src="config.js"></script>
 <script>
-const API = CONFIG.BASE_URL + '/api/v1';
-const headers = {'X-API-Key': CONFIG.API_KEY, 'X-API-Secret': CONFIG.API_SECRET};
+const useWorker = !!CONFIG.WORKER_URL;
+const API = (useWorker ? CONFIG.WORKER_URL : '') + '/api/v1';
+const headers = useWorker
+  ? {'Authorization': 'Bearer ' + CONFIG.ACCESS_TOKEN}
+  : {'X-API-Key': CONFIG.API_KEY, 'X-API-Secret': CONFIG.API_SECRET};
 let refreshTimer = null;
 let connectionMap = {};
 

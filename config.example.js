@@ -1,9 +1,11 @@
-// Copy this file to config.js and fill in your Thor API credentials
-// DO NOT commit config.js to git
 const CONFIG = {
-  API_KEY: 'your_api_key_here',
-  API_SECRET: 'your_api_secret_here',
-  // Use '' (empty) when running via server.js proxy, or 'https://app.thortradecopier.com' for direct access
-  BASE_URL: '',
-  REFRESH_INTERVAL: 3000, // ms between polling (100 req/min limit, 3s is safe)
+  // Cloudflare Worker URL (after deploy, e.g. https://thor-api-proxy.xxx.workers.dev)
+  // Leave empty for local server.js proxy
+  WORKER_URL: '',
+  // Access token for Worker auth (must match ACCESS_TOKEN secret in Worker)
+  ACCESS_TOKEN: 'your_access_token_here',
+  // Only needed for local server.js mode (ignored when WORKER_URL is set)
+  API_KEY: '',
+  API_SECRET: '',
+  REFRESH_INTERVAL: 3000,
 };

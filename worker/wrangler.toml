@@ -1,0 +1,6 @@
+name = "thor-api-proxy"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+THOR_BASE_URL = "https://app.thortradecopier.com"
