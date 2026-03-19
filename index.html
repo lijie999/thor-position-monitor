@@ -239,6 +239,11 @@ function toggleMore() {
 
 async function api(path) {
   const r = await fetch(API + path, {headers});
+  if (r.status === 429) {
+    const wait = Number(r.headers.get('Retry-After') || 3) * 1000;
+    await new Promise(ok => setTimeout(ok, wait));
+    return api(path);
+  }
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   const data = await r.json();
   debugLog('GET ' + path, data);
@@ -507,10 +512,11 @@ async function refreshFast() {
 let slowCount = 0;
 async function refreshAll() {
   try {
-    if (slowCount === 0) await loadConnections();
-    await Promise.all([loadPositions(), loadOrders(), loadClosed()]);
-    if (slowCount === 0) await loadLockouts();
-    slowCount = (slowCount + 1) % 30;
+    await loadConnections();
+    await loadPositions();
+    await loadOrders();
+    await loadClosed();
+    await loadLockouts();
     const netPnl = openPnl + closedPnl;
     const el = $('totalPnl');
     el.textContent = pnlText(netPnl);
@@ -527,8 +533,8 @@ let fastTimer = null;
 let slowTimer = null;
 function toggleAutoRefresh() {
   if ($('autoRefresh').checked) {
-    fastTimer = setInterval(refreshFast, 1000);
-    slowTimer = setInterval(() => { loadOrders(); loadClosed(); loadLockouts(); }, 10000);
+    fastTimer = setInterval(refreshFast, 2000);
+    slowTimer = setInterval(() => { loadOrders(); loadClosed(); }, 30000);
   } else {
     clearInterval(fastTimer); fastTimer = null;
     clearInterval(slowTimer); slowTimer = null;
