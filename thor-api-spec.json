@@ -1,0 +1,3118 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Thor Trade Copier API",
+    "description": "Programmatic access to Thor Trade Copier functionality. Manage connections, accounts, positions, and risk settings via REST API.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Thor Support",
+      "url": "https://thortradecopier.com",
+      "email": "support@thortradecopier.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://app.thortradecopier.com",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": [],
+      "ApiSecretAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Your Thor API key"
+      },
+      "ApiSecretAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Secret",
+        "description": "Your Thor API secret"
+      }
+    },
+    "parameters": {
+      "XCustomerId": {
+        "name": "X-Customer-Id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Target customer ID for master API keys. Required for most endpoints when using a master key. Omit to use aggregated mode on supported endpoints (e.g., GET /positions)."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ]
+      },
+      "Connection": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "Unique connection ID",
+            "example": "user_1"
+          },
+          "vendorName": {
+            "type": "string",
+            "description": "Vendor name",
+            "example": "Rithmic"
+          },
+          "vendorIcon": {
+            "type": "string",
+            "description": "URL to vendor icon",
+            "example": "/images/vendorreduced/rithmic.png"
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account ID / Username",
+            "example": "trader@example.com"
+          },
+          "customName": {
+            "type": "string",
+            "description": "Custom display name",
+            "example": "My TopStep Account"
+          },
+          "server": {
+            "type": "string",
+            "description": "Server address",
+            "example": "dd.rithmic.com"
+          },
+          "selectedConnection": {
+            "type": "string",
+            "description": "Demo or Live",
+            "example": "Demo"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether connection is active",
+            "example": true
+          },
+          "status": {
+            "type": "string",
+            "description": "Current connection status",
+            "example": "Connected"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "Group name for organization",
+            "example": "Rithmic"
+          },
+          "isCrossTradingActivated": {
+            "type": "boolean",
+            "description": "Cross-trading enabled",
+            "example": false
+          },
+          "isMarketDataActivated": {
+            "type": "boolean",
+            "description": "Market data enabled",
+            "example": true
+          },
+          "availableAccounts": {
+            "type": "array",
+            "description": "Trading accounts available under this connection (use AccountId to match with positions)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "AccountId": {
+                  "type": "string",
+                  "description": "Broker account number (matches AccountId in positions)",
+                  "example": "40362582"
+                },
+                "AccountName": {
+                  "type": "string",
+                  "description": "Display name for the account",
+                  "example": "APEX-40362582"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ConnectionCreate": {
+        "type": "object",
+        "required": [
+          "vendorName",
+          "accountId"
+        ],
+        "description": "⚠️ **IMPORTANT:** After creating/updating/deleting connections, you MUST call `POST /api/v1/config/save-connections` to apply your changes and trigger the connection process.\n\nOAuth-based vendors (Tradovate, cTrader) are NOT supported via API. Use the Thor dashboard for OAuth connections.",
+        "properties": {
+          "vendorName": {
+            "type": "string",
+            "description": "Vendor name (see /api/v1/vendors for list). OAuth vendors (Tradovate, cTrader) are NOT supported."
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account ID / Username / Email for the vendor"
+          },
+          "password": {
+            "type": "string",
+            "description": "Account password (required for credential-based vendors)"
+          },
+          "server": {
+            "type": "string",
+            "description": "Server address (required for Rithmic-based vendors and prop firms)"
+          },
+          "selectedConnection": {
+            "type": "string",
+            "enum": [
+              "Demo",
+              "Live",
+              "Real"
+            ],
+            "default": "Demo",
+            "description": "Connection type: Demo, Live, or Real"
+          },
+          "customName": {
+            "type": "string",
+            "description": "Custom display name for this connection"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "Group name for organization (defaults to vendorName)"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable connection on creation"
+          },
+          "isCrossTradingActivated": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable cross-trading (for Rithmic vendors)"
+          },
+          "isMarketDataActivated": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable market data feed"
+          }
+        },
+        "examples": {
+          "Rithmic Paper Trading": {
+            "summary": "Rithmic Paper Trading account",
+            "value": {
+              "vendorName": "Rithmic",
+              "accountId": "trader@example.com",
+              "password": "mySecurePassword123",
+              "server": "Rithmic Paper Trading",
+              "customName": "My Personal Paper Account",
+              "groupName": "Rithmic",
+              "enabled": true,
+              "isCrossTradingActivated": false,
+              "isMarketDataActivated": true
+            }
+          },
+          "Apex Trader Funding": {
+            "summary": "Apex Trader Funding on Rithmic",
+            "value": {
+              "vendorName": "Apex Trader Funding",
+              "accountId": "myapexuser@email.com",
+              "password": "apexPassword123",
+              "server": "Apex Chicago Area Summary",
+              "customName": "A cool propfirm",
+              "groupName": "Rithmic",
+              "enabled": true,
+              "isCrossTradingActivated": false,
+              "isMarketDataActivated": true
+            }
+          },
+          "dxFeed (MyFundedFutures)": {
+            "summary": "dxFeed connection for MyFundedFutures - no server needed",
+            "value": {
+              "vendorName": "MyFundedFutures",
+              "accountId": "mffu_username",
+              "password": "mffuPassword123",
+              "selectedConnection": "Demo",
+              "customName": "MFFU Demo Account",
+              "groupName": "dxFeed",
+              "enabled": true
+            }
+          },
+          "dxFeed (Phoenix Trader Funding)": {
+            "summary": "dxFeed connection for Phoenix Trader Funding - no server needed",
+            "value": {
+              "vendorName": "dxFeed",
+              "accountId": "phoenix_user@email.com",
+              "password": "phoenixPassword123",
+              "selectedConnection": "Real",
+              "customName": "Phoenix Live Account",
+              "groupName": "Phoenix Trader Funding",
+              "enabled": true
+            }
+          },
+          "TopStep (Rithmic)": {
+            "summary": "TopStep on Rithmic",
+            "value": {
+              "vendorName": "TopStep",
+              "accountId": "topstepuser@email.com",
+              "password": "topstepPassword123",
+              "server": "TopstepTrader Chicago Area",
+              "customName": "TopStep Combine",
+              "groupName": "Rithmic",
+              "enabled": true,
+              "isCrossTradingActivated": false,
+              "isMarketDataActivated": true
+            }
+          }
+        }
+      },
+      "ConnectionUpdate": {
+        "type": "object",
+        "description": "⚠️ **IMPORTANT:** After updating connections, you MUST call `POST /api/v1/config/save-connections` to apply your changes.",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable or disable the connection"
+          },
+          "customName": {
+            "type": "string",
+            "description": "Custom display name"
+          },
+          "groupName": {
+            "type": "string",
+            "description": "Group name"
+          },
+          "password": {
+            "type": "string",
+            "description": "Update password"
+          },
+          "server": {
+            "type": "string",
+            "description": "Update server address"
+          },
+          "selectedConnection": {
+            "type": "string",
+            "enum": [
+              "Demo",
+              "Live"
+            ],
+            "description": "Demo or Live connection"
+          },
+          "isCrossTradingActivated": {
+            "type": "boolean",
+            "description": "Enable/disable cross-trading"
+          },
+          "isMarketDataActivated": {
+            "type": "boolean",
+            "description": "Enable/disable market data"
+          }
+        }
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "phoenixId": {
+            "type": "string",
+            "description": "Leader account ID"
+          },
+          "convertedId": {
+            "type": "string",
+            "description": "Follower account ID"
+          },
+          "phoenixName": {
+            "type": "string",
+            "description": "Leader account display name"
+          },
+          "convertedName": {
+            "type": "string",
+            "description": "Follower account display name"
+          },
+          "vendorName": {
+            "type": "string",
+            "description": "Vendor name"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether account configuration is active (isActivated)"
+          },
+          "multiplier": {
+            "type": "number",
+            "description": "Position multiplier (multiCoeff)",
+            "example": 1
+          },
+          "stopLoss": {
+            "type": "number",
+            "description": "Daily stop loss limit (negative value, e.g., -1000)",
+            "example": -1000
+          },
+          "takeProfit": {
+            "type": "number",
+            "description": "Daily take profit goal (positive value, e.g., 1000)",
+            "example": 1000
+          },
+          "isReversed": {
+            "type": "boolean",
+            "description": "Reverse trading mode (buys become sells)",
+            "example": false
+          },
+          "isAutoLiquidateLeader": {
+            "type": "boolean",
+            "description": "Auto-liquidate leader when limits hit",
+            "example": false
+          }
+        }
+      },
+      "AccountCreate": {
+        "type": "object",
+        "required": [
+          "phoenixId",
+          "convertedId"
+        ],
+        "description": "⚠️ **IMPORTANT:** After creating/updating/deleting account configurations, you MUST call `POST /api/v1/config/save-accounts` to apply your changes.",
+        "properties": {
+          "phoenixId": {
+            "type": "string",
+            "description": "Leader account ID (the account to copy FROM) - get this from GET /api/v1/connections"
+          },
+          "convertedId": {
+            "type": "string",
+            "description": "Follower account ID (the account to copy TO) - get this from GET /api/v1/connections"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable configuration on creation (default: true)"
+          },
+          "multiplier": {
+            "type": "number",
+            "default": 1,
+            "description": "Position multiplier (default: 1)"
+          },
+          "stopLoss": {
+            "type": "number",
+            "default": -1000,
+            "description": "Daily stop loss limit in dollars, must be negative (default: -1000)"
+          },
+          "takeProfit": {
+            "type": "number",
+            "default": 1000,
+            "description": "Daily take profit goal in dollars, must be positive (default: 1000)"
+          }
+        },
+        "example": {
+          "phoenixId": "APEX-12345-Leader",
+          "convertedId": "APEX-67890-Follower",
+          "enabled": true,
+          "multiplier": 1,
+          "stopLoss": -500,
+          "takeProfit": 500
+        }
+      },
+      "AccountUpdate": {
+        "type": "object",
+        "description": "⚠️ **IMPORTANT:** After updating account configurations, you MUST call `POST /api/v1/config/save-accounts` to apply your changes.",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable or disable the configuration"
+          },
+          "multiplier": {
+            "type": "number",
+            "description": "Position multiplier"
+          },
+          "stopLoss": {
+            "type": "number",
+            "description": "Daily stop loss limit (negative value)"
+          },
+          "takeProfit": {
+            "type": "number",
+            "description": "Daily take profit goal (positive value)"
+          },
+          "isAutoLiquidateLeader": {
+            "type": "boolean",
+            "description": "Auto-liquidate leader when limits hit"
+          }
+        }
+      },
+      "Position": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "Broker account number"
+          },
+          "userId": {
+            "type": "string",
+            "description": "Thor connection ID (e.g. user_1) - maps to connections endpoint"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "long",
+              "short"
+            ]
+          },
+          "entryPrice": {
+            "type": "number"
+          },
+          "pnl": {
+            "type": "number"
+          }
+        }
+      },
+      "LockedAccount": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "Account ID that is locked"
+          },
+          "unlockTime": {
+            "type": "number",
+            "description": "Unix timestamp (ms) when the lock expires"
+          },
+          "lockedAt": {
+            "type": "number",
+            "description": "Unix timestamp (ms) when the lock was created"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for the lock"
+          },
+          "remainingMinutes": {
+            "type": "number",
+            "description": "Minutes remaining until unlock"
+          }
+        }
+      },
+      "LockAccountsRequest": {
+        "type": "object",
+        "required": [
+          "accountIds",
+          "durationMinutes"
+        ],
+        "properties": {
+          "accountIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of account IDs to lock"
+          },
+          "durationMinutes": {
+            "type": "number",
+            "description": "Duration to lock accounts (in minutes)"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for locking (optional)"
+          }
+        },
+        "example": {
+          "accountIds": [
+            "APEX-12345",
+            "APEX-67890"
+          ],
+          "durationMinutes": 60,
+          "reason": "Daily loss limit reached"
+        }
+      },
+      "NewsRestriction": {
+        "type": "object",
+        "properties": {
+          "connectionKey": {
+            "type": "string",
+            "description": "Unique connection identifier (format: username|||vendor|||server)"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether news restrictions are enabled for this connection"
+          },
+          "restrictedEvents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of news events to restrict (e.g., FOMC, NFP, CPI)"
+          },
+          "timeBeforeMinutes": {
+            "type": "number",
+            "description": "Minutes before news to pause trading"
+          },
+          "notifyBeforeMinutes": {
+            "type": "number",
+            "description": "Minutes before restriction to send notification"
+          },
+          "includeUSOpen": {
+            "type": "boolean",
+            "description": "Include US market open in restrictions"
+          },
+          "includeUKOpen": {
+            "type": "boolean",
+            "description": "Include UK market open in restrictions"
+          },
+          "includeAsiaOpen": {
+            "type": "boolean",
+            "description": "Include Asia market open in restrictions"
+          },
+          "marketOpenAfterMinutes": {
+            "type": "number",
+            "description": "Minutes after market open to resume trading"
+          },
+          "isCurrentlyRestricted": {
+            "type": "boolean",
+            "description": "Whether connection is currently restricted"
+          },
+          "restrictionEndTime": {
+            "type": "string",
+            "description": "ISO timestamp when current restriction ends"
+          }
+        }
+      },
+      "NewsRestrictionUpdate": {
+        "type": "object",
+        "required": [
+          "connectionKey"
+        ],
+        "properties": {
+          "connectionKey": {
+            "type": "string",
+            "description": "Connection identifier to update"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable or disable news restrictions"
+          },
+          "restrictedEvents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "News events to restrict"
+          },
+          "timeBeforeMinutes": {
+            "type": "number",
+            "description": "Minutes before news to pause"
+          },
+          "notifyBeforeMinutes": {
+            "type": "number",
+            "description": "Minutes before restriction to notify"
+          },
+          "includeUSOpen": {
+            "type": "boolean",
+            "description": "Include US market open"
+          },
+          "includeUKOpen": {
+            "type": "boolean",
+            "description": "Include UK market open"
+          },
+          "includeAsiaOpen": {
+            "type": "boolean",
+            "description": "Include Asia market open"
+          },
+          "marketOpenAfterMinutes": {
+            "type": "number",
+            "description": "Minutes after market open to resume"
+          }
+        },
+        "example": {
+          "connectionKey": "trader@example.com|||Rithmic|||Apex Chicago Area Summary",
+          "enabled": true,
+          "restrictedEvents": [
+            "FOMC",
+            "NFP",
+            "CPI"
+          ],
+          "timeBeforeMinutes": 15,
+          "includeUSOpen": true,
+          "marketOpenAfterMinutes": 30
+        }
+      },
+      "HistoricalAccount": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Account identifier"
+          },
+          "Name": {
+            "type": "string",
+            "description": "Account display name"
+          },
+          "Source": {
+            "type": "string",
+            "description": "Data source (e.g. rithmic, tradovate)"
+          },
+          "ExternalId": {
+            "type": "string",
+            "description": "External account identifier"
+          }
+        }
+      },
+      "HistoricalTrade": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Trade ID"
+          },
+          "AccountId": {
+            "type": "string",
+            "description": "Trading account identifier"
+          },
+          "AccountName": {
+            "type": "string",
+            "description": "Trading account display name"
+          },
+          "Symbol": {
+            "type": "string",
+            "description": "Instrument symbol"
+          },
+          "AssetType": {
+            "type": "string",
+            "description": "Asset type (e.g. Future)"
+          },
+          "Side": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "Trade direction (0 = long, 1 = short)"
+          },
+          "Quantity": {
+            "type": "number",
+            "description": "Number of contracts"
+          },
+          "EntryPrice": {
+            "type": "number",
+            "description": "Entry fill price"
+          },
+          "ExitPrice": {
+            "type": "number",
+            "description": "Exit fill price (null if still open)"
+          },
+          "StopLoss": {
+            "type": "number",
+            "description": "Stop loss price (null if not set)"
+          },
+          "TakeProfit": {
+            "type": "number",
+            "description": "Take profit price (null if not set)"
+          },
+          "Commission": {
+            "type": "number",
+            "description": "Commission paid"
+          },
+          "Fees": {
+            "type": "number",
+            "description": "Additional fees"
+          },
+          "NetPnL": {
+            "type": "number",
+            "description": "Realized net P&L"
+          },
+          "LowestURPnL": {
+            "type": "number",
+            "description": "Maximum Adverse Excursion - worst unrealized P&L during the trade"
+          },
+          "HighestURPnL": {
+            "type": "number",
+            "description": "Maximum Favorable Excursion - best unrealized P&L during the trade"
+          },
+          "EntryTime": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Entry timestamp"
+          },
+          "ExitTime": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Exit timestamp (null if still open)"
+          },
+          "SetupStrategy": {
+            "type": "string",
+            "description": "Setup or strategy name"
+          },
+          "PlaybookId": {
+            "type": "integer",
+            "description": "Playbook ID"
+          },
+          "Notes": {
+            "type": "string",
+            "description": "Trade notes"
+          },
+          "Tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Trade tags"
+          },
+          "Source": {
+            "type": "string",
+            "description": "Data source (e.g. rithmic, tradovate)"
+          },
+          "ExternalId": {
+            "type": "string",
+            "description": "External trade identifier"
+          },
+          "Vendor": {
+            "type": "string",
+            "description": "Trading platform vendor"
+          },
+          "IsJournaled": {
+            "type": "boolean",
+            "description": "Whether the trade has journal entries"
+          },
+          "EntryTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Journal entry tags"
+          }
+        }
+      },
+      "TradeStats": {
+        "type": "object",
+        "properties": {
+          "overview": {
+            "type": "object",
+            "properties": {
+              "totalTrades": {
+                "type": "integer"
+              },
+              "winningTrades": {
+                "type": "integer"
+              },
+              "losingTrades": {
+                "type": "integer"
+              },
+              "breakEvenTrades": {
+                "type": "integer"
+              },
+              "winRate": {
+                "type": "number",
+                "description": "Win rate percentage"
+              },
+              "totalPnl": {
+                "type": "number"
+              },
+              "totalCommissions": {
+                "type": "number"
+              },
+              "netPnl": {
+                "type": "number"
+              },
+              "avgWin": {
+                "type": "number"
+              },
+              "avgLoss": {
+                "type": "number"
+              },
+              "profitFactor": {
+                "type": "number"
+              },
+              "largestWin": {
+                "type": "number"
+              },
+              "largestLoss": {
+                "type": "number"
+              },
+              "avgDurationSeconds": {
+                "type": "number"
+              }
+            }
+          },
+          "streaks": {
+            "type": "object",
+            "properties": {
+              "currentStreak": {
+                "type": "integer"
+              },
+              "currentStreakType": {
+                "type": "string",
+                "enum": [
+                  "win",
+                  "loss",
+                  "none"
+                ]
+              },
+              "longestWinStreak": {
+                "type": "integer"
+              },
+              "longestLossStreak": {
+                "type": "integer"
+              }
+            }
+          },
+          "daily": {
+            "type": "object",
+            "properties": {
+              "bestDay": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string"
+                  },
+                  "pnl": {
+                    "type": "number"
+                  }
+                }
+              },
+              "worstDay": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string"
+                  },
+                  "pnl": {
+                    "type": "number"
+                  }
+                }
+              },
+              "avgDailyPnl": {
+                "type": "number"
+              },
+              "profitableDays": {
+                "type": "integer"
+              },
+              "totalDays": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Bad Request - Invalid input",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Unauthorized - Invalid or missing API credentials",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Forbidden - Active Journal or Thor subscription required",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Not Found - Resource does not exist",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Too Many Requests - Rate limit exceeded (100 req/min)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Internal Server Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "Service Unavailable - Journal database is temporarily unavailable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/connections": {
+      "get": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "List all connections",
+        "description": "Retrieve all trading connections for the authenticated user. Each connection includes a unique `userId` field that you can use with PUT and DELETE endpoints.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "connections": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Connection"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "connections": [
+                    {
+                      "userId": "user_1",
+                      "vendorName": "Rithmic",
+                      "vendorIcon": "/images/vendorreduced/rithmic.png",
+                      "accountId": "trader@example.com",
+                      "customName": "My TopStep Demo",
+                      "server": "dd.rithmic.com",
+                      "selectedConnection": "Demo",
+                      "enabled": true,
+                      "status": "Connected",
+                      "groupName": "Rithmic",
+                      "isCrossTradingActivated": false,
+                      "isMarketDataActivated": true
+                    },
+                    {
+                      "userId": "user_2",
+                      "vendorName": "Tradovate",
+                      "vendorIcon": "/images/vendorreduced/tradovate.png",
+                      "accountId": "myaccount",
+                      "customName": "Tradovate Live",
+                      "server": "",
+                      "selectedConnection": "Live",
+                      "enabled": true,
+                      "status": "Connected",
+                      "groupName": "Tradovate",
+                      "isCrossTradingActivated": false,
+                      "isMarketDataActivated": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Create a connection",
+        "description": "Add a new trading connection. Returns the `userId` which can be used to update or delete the connection.\n\n⚠️ **IMPORTANT:** After creating connection(s), you MUST call `POST /api/v1/config/save-connections` to apply your changes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionCreate"
+              },
+              "examples": {
+                "Rithmic Paper Trading": {
+                  "summary": "Rithmic Paper Trading account",
+                  "value": {
+                    "vendorName": "Rithmic",
+                    "accountId": "trader@example.com",
+                    "password": "mySecurePassword123",
+                    "server": "Rithmic Paper Trading",
+                    "customName": "My Personal Paper Account",
+                    "groupName": "Rithmic",
+                    "enabled": true,
+                    "isCrossTradingActivated": false,
+                    "isMarketDataActivated": true
+                  }
+                },
+                "Apex Trader Funding": {
+                  "summary": "Apex Trader Funding on Rithmic",
+                  "value": {
+                    "vendorName": "Apex Trader Funding",
+                    "accountId": "myapexuser@email.com",
+                    "password": "apexPassword123",
+                    "server": "Apex Chicago Area Summary",
+                    "customName": "A cool propfirm",
+                    "groupName": "Rithmic",
+                    "enabled": true,
+                    "isCrossTradingActivated": false,
+                    "isMarketDataActivated": true
+                  }
+                },
+                "dxFeed (MyFundedFutures)": {
+                  "summary": "dxFeed connection - no server needed",
+                  "value": {
+                    "vendorName": "MyFundedFutures",
+                    "accountId": "mffu_username",
+                    "password": "mffuPassword123",
+                    "selectedConnection": "Demo",
+                    "customName": "MFFU Demo Account",
+                    "groupName": "dxFeed",
+                    "enabled": true
+                  }
+                },
+                "dxFeed (Phoenix Trader Funding)": {
+                  "summary": "dxFeed connection for Phoenix Trader Funding",
+                  "value": {
+                    "vendorName": "dxFeed",
+                    "accountId": "phoenix_user@email.com",
+                    "password": "phoenixPassword123",
+                    "selectedConnection": "Real",
+                    "customName": "Phoenix Live Account",
+                    "groupName": "Phoenix Trader Funding",
+                    "enabled": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "string",
+                      "description": "Unique connection ID - use this for PUT/DELETE operations"
+                    },
+                    "vendorName": {
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "userId": "user_3",
+                  "vendorName": "Rithmic",
+                  "accountId": "newtrader@example.com",
+                  "message": "Connection created successfully. Use POST /api/v1/config/save-accounts to activate."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Duplicate connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "duplicate_connection",
+                  "message": "A connection with this accountId and vendor already exists",
+                  "existingUserId": "user_1"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}": {
+      "put": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Update a connection",
+        "description": "Update an existing connection. Get the connection ID from GET /api/v1/connections or from the POST response when creating.\n\n⚠️ **IMPORTANT:** After updating connection(s), you MUST call `POST /api/v1/config/save-connections` to apply your changes.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Connection ID (userId) - obtained from GET /connections or POST /connections response",
+            "example": "user_1"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Connection updated successfully"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Delete a connection",
+        "description": "Remove a trading connection. Get the connection ID from GET /api/v1/connections.\n\n⚠️ **IMPORTANT:** After deleting connection(s), you MUST call `POST /api/v1/config/save-connections` to apply your changes.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Connection ID (userId) - obtained from GET /connections or POST /connections response",
+            "example": "user_1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Connection deleted successfully"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/accounts": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "List all account configurations",
+        "description": "Retrieve all leader->follower copy configurations. Each configuration includes a unique `clientId` that you can use with PUT and DELETE endpoints.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Account"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "accounts": [
+                    {
+                      "clientId": "api_1702489200000_abc123xyz",
+                      "phoenixId": "APEX-12345-Leader",
+                      "phoenixName": "APEX-12345-Leader",
+                      "convertedId": "APEX-67890-Follower",
+                      "convertedName": "APEX-67890-Follower",
+                      "enabled": true,
+                      "multiplier": 1,
+                      "stopLoss": -1000,
+                      "takeProfit": 1000,
+                      "isReversed": false,
+                      "isAutoLiquidateLeader": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "Create an account configuration",
+        "description": "Create a new leader->follower copy configuration. Returns a `clientId` which can be used to update or delete the configuration.\n\n⚠️ **IMPORTANT:** After creating configuration(s), you MUST call `POST /api/v1/config/save-accounts` to apply your changes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string",
+                      "description": "Unique configuration ID - use this for PUT/DELETE operations"
+                    },
+                    "phoenixId": {
+                      "type": "string"
+                    },
+                    "convertedId": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "clientId": "api_1702489200000_abc123xyz",
+                  "phoenixId": "APEX-12345-Leader",
+                  "convertedId": "APEX-67890-Follower",
+                  "message": "Account configuration created successfully. Use this clientId to update or delete the configuration."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Duplicate configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "duplicate_configuration",
+                  "message": "A configuration with this leader and follower already exists",
+                  "existingClientId": "api_1702489100000_xyz789abc"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{id}": {
+      "put": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "Update an account configuration",
+        "description": "Update an existing account configuration. Get the configuration ID from GET /api/v1/accounts or from the POST response when creating.\n\n⚠️ **IMPORTANT:** After updating configuration(s), you MUST call `POST /api/v1/config/save-accounts` to apply your changes.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Configuration ID (clientId) - obtained from GET /accounts or POST /accounts response",
+            "example": "api_1702489200000_abc123xyz"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Account configuration updated successfully"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "Delete an account configuration",
+        "description": "Remove an account configuration. Get the configuration ID from GET /api/v1/accounts.\n\n⚠️ **IMPORTANT:** After deleting configuration(s), you MUST call `POST /api/v1/config/save-accounts` to apply your changes.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Configuration ID (clientId) - obtained from GET /accounts or POST /accounts response",
+            "example": "api_1702489200000_abc123xyz"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Account configuration deleted successfully"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/positions": {
+      "get": {
+        "tags": [
+          "Positions"
+        ],
+        "summary": "Get current positions",
+        "description": "Retrieve all current open positions for today. This data resets daily and only contains the current trading day. For historical trade data, use GET /api/v1/historical/trades.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "positions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Position"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/positions/orders": {
+      "get": {
+        "tags": [
+          "Positions"
+        ],
+        "summary": "Get working orders",
+        "description": "Retrieve all pending/working orders for today. This data resets daily.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orders": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/positions/closed": {
+      "get": {
+        "tags": [
+          "Positions"
+        ],
+        "summary": "Get closed positions",
+        "description": "Retrieve positions closed during the current trading day. This data resets daily. For full historical trade data, use GET /api/v1/historical/trades.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "closedPositions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/positions/running": {
+      "get": {
+        "tags": [
+          "Positions"
+        ],
+        "summary": "Get running positions",
+        "description": "Retrieve only currently open (running) positions. Equivalent to filtering /api/v1/positions for entries where IsClosed is false. This data resets daily.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "positions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Position"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/positions/flatten": {
+      "post": {
+        "tags": [
+          "Positions"
+        ],
+        "summary": "Flatten all positions",
+        "description": "Flatten (close) all open positions across all accounts. This is an all-or-nothing operation. Only affects today's active positions.",
+        "responses": {
+          "200": {
+            "description": "Command sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Flatten all positions command sent"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/positions/close": {
+      "post": {
+        "tags": [
+          "Positions"
+        ],
+        "summary": "Close a position",
+        "description": "Close a specific position",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "accountId"
+                ],
+                "properties": {
+                  "accountId": {
+                    "type": "string"
+                  },
+                  "symbol": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command sent"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/positions/cancel": {
+      "post": {
+        "tags": [
+          "Positions"
+        ],
+        "summary": "Cancel an order",
+        "description": "Cancel a specific working order",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "accountId",
+                  "orderId"
+                ],
+                "properties": {
+                  "accountId": {
+                    "type": "string"
+                  },
+                  "orderId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command sent"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/risk/lockouts": {
+      "get": {
+        "tags": [
+          "Risk Management"
+        ],
+        "summary": "Get locked accounts",
+        "description": "Get all currently locked accounts. Locked accounts cannot trade until the lock expires or is manually removed.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lockedAccounts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/LockedAccount"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "lockedAccounts": [
+                    {
+                      "accountId": "APEX-12345",
+                      "unlockTime": 1702500000000,
+                      "lockedAt": 1702496400000,
+                      "reason": "Daily loss limit",
+                      "remainingMinutes": 45
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Risk Management"
+        ],
+        "summary": "Lock accounts",
+        "description": "Lock one or more accounts for a specified duration. This disables all trading configurations using these accounts.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LockAccountsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Accounts locked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "unlockTime": {
+                      "type": "number"
+                    },
+                    "lockedAccounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Locked 2 account(s) for 60 minutes",
+                  "unlockTime": 1702500000000,
+                  "lockedAccounts": [
+                    "APEX-12345",
+                    "APEX-67890"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Risk Management"
+        ],
+        "summary": "Unlock accounts",
+        "description": "Unlock one or more accounts before their lock expires",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "accountIds"
+                ],
+                "properties": {
+                  "accountIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Array of account IDs to unlock"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accounts unlocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "unlockedAccounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Unlocked 2 account(s)",
+                  "unlockedAccounts": [
+                    "APEX-12345",
+                    "APEX-67890"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/risk/news": {
+      "get": {
+        "tags": [
+          "Risk Management"
+        ],
+        "summary": "Get news restrictions",
+        "description": "Get all news trading restrictions configured for your connections. News restrictions automatically pause trading around high-impact economic events.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "newsRestrictions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/NewsRestriction"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Risk Management"
+        ],
+        "summary": "Update news restriction",
+        "description": "Create or update news restriction for a connection. Common restrictedEvents: FOMC, NFP, CPI, PPI, GDP, Retail Sales, ISM Manufacturing",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsRestrictionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Restriction updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "restriction": {
+                      "$ref": "#/components/schemas/NewsRestriction"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/risk/news/{connectionKey}": {
+      "delete": {
+        "tags": [
+          "Risk Management"
+        ],
+        "summary": "Delete news restriction",
+        "description": "Remove news restriction for a connection",
+        "parameters": [
+          {
+            "name": "connectionKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "URL-encoded connection key"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Restriction removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/config/save-connections": {
+      "post": {
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Save & apply connection changes",
+        "description": "**IMPORTANT:** You MUST call this endpoint after making changes to connections (create, update, or delete). This triggers Thor to reload and apply your connection changes. Without calling this, your changes will be stored but not active.\n\n**Workflow:**\n1. Make your connection changes (POST/PUT/DELETE /api/v1/connections)\n2. Call this endpoint to apply all changes at once",
+        "responses": {
+          "200": {
+            "description": "Connections saved and applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Connections saved and applied"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/config/save-accounts": {
+      "post": {
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Save & apply account config changes",
+        "description": "**IMPORTANT:** You MUST call this endpoint after making changes to account configurations (create, update, or delete). This triggers Thor to reload and apply your account configuration changes. Without calling this, your changes will be stored but not active.\n\n**Workflow:**\n1. Make your account config changes (POST/PUT/DELETE /api/v1/accounts)\n2. Call this endpoint to apply all changes at once",
+        "responses": {
+          "200": {
+            "description": "Account configurations saved and applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Account configurations saved and applied"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/config/sync": {
+      "post": {
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Sync accounts from trading platforms",
+        "description": "Fetches the latest account list from your connected trading platforms.\n\n**⚠️ ONLY use this after a reset of a newly purchased account.** This refreshes the available accounts from your trading platforms - it does NOT save any of your configurations.\n\n**This endpoint does NOT save connections or account configurations.** Use `save-connections` or `save-accounts` for that.",
+        "responses": {
+          "200": {
+            "description": "Sync triggered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true,
+                  "message": "Account sync from trading platforms triggered"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/initiate": {
+      "post": {
+        "tags": [
+          "OAuth (Partner)"
+        ],
+        "summary": "Get an OAuth URL to connect a trading account",
+        "description": "Returns a URL that your application opens as a popup. The user logs in on the vendor site, and after authentication, the popup redirects to your `redirectUri` with the access token as a query parameter.\n\n**Supported vendors:** Tradovate, cTrader, Tradovate Live, cTrader Live\n\n**Flow:**\n1. Call this endpoint to get an `oauthUrl`\n2. Open `oauthUrl` as a popup window\n3. User logs in on the vendor site\n4. Popup redirects to your `redirectUri` with `?vendor=...&access_token=...`\n5. Use the access token to create a connection via `POST /api/v1/connections/oauth`",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vendorName",
+                  "redirectUri"
+                ],
+                "properties": {
+                  "vendorName": {
+                    "type": "string",
+                    "enum": [
+                      "Tradovate",
+                      "cTrader",
+                      "Tradovate Live",
+                      "cTrader Live"
+                    ],
+                    "description": "The trading platform to connect"
+                  },
+                  "redirectUri": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Your callback URL where the popup will be redirected with the access token"
+                  }
+                }
+              },
+              "example": {
+                "vendorName": "Tradovate",
+                "redirectUri": "https://yoursite.com/oauth/callback"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OAuth URL generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "oauthUrl": {
+                      "type": "string",
+                      "description": "URL to open as a popup for the user to authenticate"
+                    },
+                    "expiresIn": {
+                      "type": "integer",
+                      "description": "Seconds until the URL expires"
+                    }
+                  }
+                },
+                "example": {
+                  "oauthUrl": "https://trader.tradovate.com/oauth?response_type=code&client_id=...&redirect_uri=...&state=...",
+                  "expiresIn": 600
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/connections/oauth": {
+      "post": {
+        "tags": [
+          "OAuth (Partner)"
+        ],
+        "summary": "Create an OAuth connection",
+        "description": "Create a trading connection using an access token obtained from the OAuth flow.\n\n**Important:** After creating the connection, you MUST call `POST /api/v1/config/save-connections` to activate it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vendorName",
+                  "accessToken"
+                ],
+                "properties": {
+                  "vendorName": {
+                    "type": "string",
+                    "enum": [
+                      "Tradovate",
+                      "cTrader",
+                      "Tradovate Live",
+                      "cTrader Live"
+                    ],
+                    "description": "The vendor from the OAuth flow"
+                  },
+                  "accessToken": {
+                    "type": "string",
+                    "description": "The access token received from the OAuth callback redirect"
+                  },
+                  "accountName": {
+                    "type": "string",
+                    "description": "Tradovate account name from the OAuth callback (used to build the account ID as TRDV_<name>)"
+                  },
+                  "customName": {
+                    "type": "string",
+                    "description": "Optional custom name for this connection"
+                  }
+                }
+              },
+              "example": {
+                "vendorName": "Tradovate",
+                "accessToken": "eyJhbGciOi...",
+                "accountName": "MyAccount",
+                "customName": "My Trading Account"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Connection created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "string"
+                    },
+                    "vendorName": {
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "userId": "user_3",
+                  "vendorName": "Tradovate",
+                  "accountId": "TRDV_MyAccount",
+                  "message": "Connection created. Call POST /api/v1/config/save-connections to activate."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/vendors": {
+      "get": {
+        "tags": [
+          "Vendors"
+        ],
+        "summary": "List available vendors",
+        "description": "Retrieve the list of supported trading platform vendors and their connection types.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "vendors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "Vendor name"
+                          },
+                          "connections": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Available connection types"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/historical/accounts": {
+      "get": {
+        "tags": [
+          "Historical Trades"
+        ],
+        "summary": "List trading accounts",
+        "description": "Retrieve all unique trading accounts that have historical trade data. Requires an active Journal or Thor subscription.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HistoricalAccount"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "accounts": [
+                    {
+                      "Id": "APEX-12345",
+                      "Name": "Apex Funded Account",
+                      "Source": "rithmic",
+                      "ExternalId": ""
+                    },
+                    {
+                      "Id": "TRD-67890",
+                      "Name": "Tradovate Sim",
+                      "Source": "tradovate",
+                      "ExternalId": "ext_123"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/historical/trades/stats": {
+      "get": {
+        "tags": [
+          "Historical Trades"
+        ],
+        "summary": "Get trade statistics",
+        "description": "Retrieve aggregated trade statistics including win rate, P&L, streaks, and daily performance. Supports filtering by date range, symbol, playbook, and account.",
+        "parameters": [
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Start date filter (YYYY-MM-DD)",
+            "example": "2024-01-01"
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "End date filter (YYYY-MM-DD)",
+            "example": "2024-12-31"
+          },
+          {
+            "name": "symbol",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by symbol (partial match)",
+            "example": "ES"
+          },
+          {
+            "name": "playbook",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by playbook name",
+            "example": "Breakout"
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by account ID",
+            "example": "APEX-12345"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeStats"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/historical/trades/journaled-ids": {
+      "get": {
+        "tags": [
+          "Historical Trades"
+        ],
+        "summary": "Get journaled trade IDs",
+        "description": "Retrieve the IDs of trades that have been journaled (have notes, tags, playbook, or rating). Useful for checking which trades have journal entries without fetching full trade data.",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated trade IDs to check. If omitted, returns count of all journaled trades.",
+            "example": "1,2,3,4,5"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "journaledIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "IDs that have journal entries (when ids param provided)"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "description": "Total number of journaled trades (when ids param omitted)"
+                    }
+                  }
+                },
+                "example": {
+                  "journaledIds": [
+                    1,
+                    3,
+                    5
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/historical/trades": {
+      "get": {
+        "tags": [
+          "Historical Trades"
+        ],
+        "summary": "List historical trades",
+        "description": "Retrieve historical trades with filtering and pagination. Supports cursor-based pagination for efficient traversal of large datasets, as well as offset-based pagination.\n\n**Pagination:** Use `cursor` from the response `nextCursor` field for cursor-based pagination, or use `page` + `limit` for offset-based pagination. Cursor-based pagination is recommended for large datasets.",
+        "parameters": [
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Start date filter (YYYY-MM-DD)",
+            "example": "2024-01-01"
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "End date filter (YYYY-MM-DD)",
+            "example": "2024-12-31"
+          },
+          {
+            "name": "symbol",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by symbol (partial match)",
+            "example": "ES"
+          },
+          {
+            "name": "side",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "Buy",
+                "Sell"
+              ]
+            },
+            "description": "Filter by trade direction"
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by account ID",
+            "example": "APEX-12345"
+          },
+          {
+            "name": "playbook",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by playbook name"
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by tag (partial match)"
+          },
+          {
+            "name": "minPnl",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Minimum P&L filter"
+          },
+          {
+            "name": "maxPnl",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Maximum P&L filter"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "maximum": 500
+            },
+            "description": "Number of trades per page (max 500)"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Cursor for cursor-based pagination (from nextCursor in response)"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number for offset-based pagination"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "entry_time",
+                "exit_time",
+                "pnl",
+                "symbol"
+              ],
+              "default": "entry_time"
+            },
+            "description": "Sort field"
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
+            },
+            "description": "Sort order"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "trades": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HistoricalTrade"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer",
+                          "description": "Current page number"
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "description": "Items per page"
+                        },
+                        "total": {
+                          "type": "integer",
+                          "description": "Total matching trades (omitted with cursor pagination)"
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "description": "Total pages (omitted with cursor pagination)"
+                        },
+                        "hasMore": {
+                          "type": "boolean",
+                          "description": "Whether more pages exist"
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "description": "Cursor for next page (use with cursor param)"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/customers": {
+      "get": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "List customers (Master Key only)",
+        "description": "Returns a paginated list of customers across the master key's allowed instances. Requires a master API key.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque cursor for pagination"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 200
+            },
+            "description": "Number of results per page"
+          },
+          {
+            "name": "instanceId",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Filter by specific instance ID"
+          },
+          {
+            "name": "customerId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by exact customer ID"
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by email prefix"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search across email and name"
+          },
+          {
+            "name": "createdAfter",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Filter: created after this date"
+          },
+          {
+            "name": "createdBefore",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Filter: created before this date"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer list with pagination"
+          },
+          "403": {
+            "description": "Master key required or instance not allowed"
+          }
+        }
+      }
+    },
+    "/api/v1/customers/{customerId}": {
+      "get": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "Get customer detail (Master Key only)",
+        "description": "Returns detailed information for a specific customer. Requires a master API key.",
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The customer ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer details"
+          },
+          "403": {
+            "description": "Master key required or instance not allowed"
+          },
+          "404": {
+            "description": "Customer not found"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Connections",
+      "description": "Manage trading platform connections. Remember to call save-connections after changes!"
+    },
+    {
+      "name": "Accounts",
+      "description": "Manage leader-follower copy configurations. Remember to call save-accounts after changes!"
+    },
+    {
+      "name": "Positions",
+      "description": "View and manage today's positions and orders. Position data resets daily. For historical trade data, use the Historical Trades endpoints."
+    },
+    {
+      "name": "Risk Management",
+      "description": "Account lockouts and news trading restrictions"
+    },
+    {
+      "name": "Configuration",
+      "description": "Save changes and sync with trading platforms"
+    },
+    {
+      "name": "Vendors",
+      "description": "Available trading platform vendors and connection types"
+    },
+    {
+      "name": "Historical Trades",
+      "description": "Read-only access to historical trade data from the Journal database. Requires an active Journal or Thor subscription. For today's live positions, use the Positions endpoints."
+    },
+    {
+      "name": "Customers",
+      "description": "List and inspect customers under a master API key."
+    }
+  ]
+}

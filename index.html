@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thor 持仓监控</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;
+  --text-dim:#8b949e;--green:#3fb950;--red:#f85149;--blue:#58a6ff;
+  --yellow:#d29922;--hover:#1f2937;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+a{color:var(--blue);text-decoration:none}
+
+.header{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border)}
+.header h1{font-size:18px;font-weight:600;display:flex;align-items:center;gap:8px}
+.header .status{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--text-dim)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot.on{background:var(--green)}.dot.off{background:var(--red)}.dot.loading{background:var(--yellow)}
+
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;padding:16px 20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.card .label{font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+.card .value{font-size:22px;font-weight:700;margin-top:4px}
+.card .value.positive{color:var(--green)}.card .value.negative{color:var(--red)}
+
+.tabs{display:flex;gap:0;padding:0 20px;border-bottom:1px solid var(--border);background:var(--surface)}
+.tab{padding:10px 20px;cursor:pointer;color:var(--text-dim);border-bottom:2px solid transparent;
+  font-size:13px;font-weight:500;transition:all .15s}
+.tab:hover{color:var(--text)}.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+.panel{padding:16px 20px;display:none}.panel.active{display:block}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{text-align:left;padding:8px 12px;color:var(--text-dim);font-weight:500;
+  border-bottom:1px solid var(--border);font-size:12px;text-transform:uppercase;letter-spacing:.5px;
+  position:sticky;top:0;background:var(--surface)}
+tbody td{padding:8px 12px;border-bottom:1px solid var(--border)}
+tbody tr:hover{background:var(--hover)}
+.side-long{color:var(--green);font-weight:600}.side-short{color:var(--red);font-weight:600}
+.pnl-pos{color:var(--green)}.pnl-neg{color:var(--red)}
+
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:auto;max-height:60vh}
+
+.actions{display:flex;gap:8px;padding:12px 20px}
+.btn{padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface);
+  color:var(--text);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s}
+.btn:hover{background:var(--hover)}.btn.danger{border-color:var(--red);color:var(--red)}
+.btn.danger:hover{background:var(--red);color:#fff}
+.btn.sm{padding:3px 8px;font-size:12px}
+
+.conn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.conn-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px}
+.conn-card .name{font-weight:600;font-size:14px;margin-bottom:6px}
+.conn-card .meta{font-size:12px;color:var(--text-dim);display:flex;flex-direction:column;gap:3px}
+.conn-card .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.badge.connected{background:#0d3321;color:var(--green)}
+.badge.disconnected{background:#3d1418;color:var(--red)}
+
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.stat-card .label{font-size:12px;color:var(--text-dim);margin-bottom:4px}
+.stat-card .value{font-size:20px;font-weight:700}
+
+.empty{text-align:center;padding:40px;color:var(--text-dim);font-size:14px}
+.refresh-bar{font-size:11px;color:var(--text-dim);padding:4px 20px;text-align:right}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;
+  align-items:center;justify-content:center;z-index:100}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:24px;max-width:400px;width:90%}
+.modal h3{margin-bottom:12px}.modal p{color:var(--text-dim);margin-bottom:16px;font-size:13px}
+.modal .btn-row{display:flex;gap:8px;justify-content:flex-end}
+
+.debug-bar{font-size:11px;color:var(--yellow);padding:4px 20px;cursor:pointer}
+.debug-panel{display:none;padding:8px 20px;max-height:200px;overflow:auto;
+  background:#1a1a2e;font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all}
+.debug-panel.show{display:block}
+
+@media(max-width:600px){
+  .header{flex-direction:column;gap:8px;text-align:center}
+  .header .status{justify-content:center;flex-wrap:wrap}
+  .summary{grid-template-columns:repeat(2,1fr);gap:8px;padding:12px}
+  .card .value{font-size:18px}
+  .tabs{overflow-x:auto;padding:0 8px;-webkit-overflow-scrolling:touch}
+  .tab{padding:8px 12px;font-size:12px;white-space:nowrap}
+  .actions{flex-wrap:wrap;padding:8px 12px}
+  .panel{padding:8px 12px}
+  .table-wrap{max-height:50vh;font-size:12px}
+  thead th,tbody td{padding:6px 8px}
+  .conn-grid{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .stat-card{padding:12px}
+  .stat-card .value{font-size:16px}
+  .modal{padding:16px;max-width:95%}
+  .btn.sm{padding:4px 10px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Thor 持仓监控</h1>
+  <div class="status">
+    <span>API: <span class="dot loading" id="apiDot"></span></span>
+    <span id="connCount">0 个连接</span>
+    <span id="clock"></span>
+  </div>
+</div>
+
+<div class="summary" id="summaryPanel">
+  <div class="card"><div class="label">净盈亏</div><div class="value" id="totalPnl">--</div></div>
+  <div class="card"><div class="label">持仓数</div><div class="value" id="openCount">--</div></div>
+  <div class="card"><div class="label">挂单数</div><div class="value" id="orderCount">--</div></div>
+  <div class="card"><div class="label">今日已平</div><div class="value" id="closedCount">--</div></div>
+  <div class="card"><div class="label">锁定账户</div><div class="value" id="lockedCount">--</div></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="positions">持仓</div>
+  <div class="tab" data-tab="orders">挂单</div>
+  <div class="tab" data-tab="closed">今日已平</div>
+  <div class="tab" data-tab="connections">连接</div>
+  <div class="tab" data-tab="stats">统计</div>
+</div>
+
+<div class="actions">
+  <button class="btn danger" onclick="confirmFlatten()">一键全平</button>
+  <button class="btn" onclick="refreshAll()">立即刷新</button>
+  <label style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:13px;color:var(--text-dim)">
+    自动刷新 <input type="checkbox" id="autoRefresh" checked onchange="toggleAutoRefresh()">
+  </label>
+</div>
+
+<div class="panel active" id="panel-positions">
+  <div class="table-wrap">
+    <table><thead><tr>
+      <th>账户</th><th>合约</th><th>方向</th><th>数量</th><th>入场价</th><th>盈亏</th><th>操作</th>
+    </tr></thead><tbody id="posBody"></tbody></table>
+  </div>
+</div>
+
+<div class="panel" id="panel-orders">
+  <div class="table-wrap">
+    <table><thead><tr>
+      <th>账户</th><th>合约</th><th>方向</th><th>数量</th><th>价格</th><th>类型</th><th>操作</th>
+    </tr></thead><tbody id="orderBody"></tbody></table>
+  </div>
+</div>
+
+<div class="panel" id="panel-closed">
+  <div class="table-wrap">
+    <table><thead><tr>
+      <th>账户</th><th>合约</th><th>方向</th><th>数量</th><th>入场价</th><th>盈亏</th>
+    </tr></thead><tbody id="closedBody"></tbody></table>
+  </div>
+</div>
+
+<div class="panel" id="panel-connections">
+  <div class="conn-grid" id="connGrid"></div>
+</div>
+
+<div class="panel" id="panel-stats">
+  <div class="stats-grid" id="statsGrid"></div>
+</div>
+
+<div class="refresh-bar">上次更新: <span id="lastUpdate">--</span></div>
+
+<div class="debug-bar" onclick="toggleDebug()">[ 调试日志 ]</div>
+<div class="debug-panel" id="debugPanel"></div>
+
+<div class="modal-overlay" id="flattenModal">
+  <div class="modal">
+    <h3>确认全部平仓</h3>
+    <p>这将关闭所有账户的所有持仓，此操作不可撤销。</p>
+    <div class="btn-row">
+      <button class="btn" onclick="closeFlattenModal()">取消</button>
+      <button class="btn danger" onclick="executeFlatten()">确认全平</button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+const API = CONFIG.BASE_URL + '/api/v1';
+const headers = {'X-API-Key': CONFIG.API_KEY, 'X-API-Secret': CONFIG.API_SECRET};
+let refreshTimer = null;
+let connectionMap = {};
+
+function debugLog(label, data) {
+  console.log('[Thor]', label, data);
+  const el = document.getElementById('debugPanel');
+  const time = new Date().toLocaleTimeString('en-US', {hour12:false});
+  el.textContent = `[${time}] ${label}:\n${JSON.stringify(data, null, 2)}\n\n` + el.textContent;
+  if (el.textContent.length > 50000) el.textContent = el.textContent.slice(0, 50000);
+}
+
+function toggleDebug() {
+  document.getElementById('debugPanel').classList.toggle('show');
+}
+
+async function api(path) {
+  const r = await fetch(API + path, {headers});
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  const data = await r.json();
+  debugLog('GET ' + path, data);
+  return data;
+}
+
+async function apiPost(path, body) {
+  const r = await fetch(API + path, {method:'POST', headers:{...headers,'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined});
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  const data = await r.json();
+  debugLog('POST ' + path, data);
+  return data;
+}
+
+function $(id) { return document.getElementById(id); }
+function pnlClass(v) { return v >= 0 ? 'pnl-pos' : 'pnl-neg'; }
+function pnlText(v) { return (v >= 0 ? '+' : '') + Number(v).toFixed(2); }
+function normSide(s) { if (s === 0 || s === '0' || String(s).toLowerCase() === 'long' || String(s).toLowerCase() === 'buy') return 'long'; if (s === 1 || s === '1' || String(s).toLowerCase() === 'short' || String(s).toLowerCase() === 'sell') return 'short'; return String(s); }
+function sideClass(s) { return normSide(s) === 'long' ? 'side-long' : 'side-short'; }
+function sideText(s) { const n = normSide(s); return n === 'long' ? '多' : n === 'short' ? '空' : n; }
+function val(obj, ...keys) { for (const k of keys) { if (obj[k] !== undefined && obj[k] !== null) return obj[k]; } return ''; }
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $('panel-' + t.dataset.tab).classList.add('active');
+  });
+});
+
+function updateClock() {
+  $('clock').textContent = new Date().toLocaleTimeString('en-US', {hour12:false});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+async function loadConnections() {
+  try {
+    const data = await api('/connections');
+    const conns = data.connections || [];
+    connectionMap = {};
+    conns.forEach(c => {
+      connectionMap[c.userId] = c.customName || c.accountId;
+      if (c.availableAccounts) {
+        c.availableAccounts.forEach(a => { connectionMap[a.AccountId] = a.AccountName || a.AccountId; });
+      }
+    });
+    $('connCount').textContent = conns.length + ' 个连接';
+    $('connGrid').innerHTML = conns.map(c => `
+      <div class="conn-card">
+        <div class="name">${c.customName || c.accountId}</div>
+        <div class="meta">
+          <span>${c.vendorName} &middot; ${c.server || 'N/A'}</span>
+          <span>${c.selectedConnection}</span>
+          <span class="badge ${c.status === 'Connected' ? 'connected' : 'disconnected'}">${c.status || '未知'}</span>
+        </div>
+      </div>
+    `).join('');
+    return conns;
+  } catch(e) { debugLog('connections error', e.message); return []; }
+}
+
+function accountName(id) { return connectionMap[id] || id; }
+
+async function loadPositions() {
+  try {
+    const data = await api('/positions');
+    const allPos = data.positions || data.Positions || [];
+    if (Array.isArray(allPos) && allPos.length > 0) {
+      debugLog('positions sample[0]', allPos[0]);
+    }
+
+    const runningData = await api('/positions/running');
+    const running = runningData.positions || runningData.Positions || [];
+
+    const pos = running.length > 0 ? running : allPos;
+    $('openCount').textContent = pos.length;
+    let totalPnl = 0;
+    $('posBody').innerHTML = pos.length === 0
+      ? '<tr><td colspan="7" class="empty">暂无持仓</td></tr>'
+      : pos.map(p => {
+        const pnl = Number(val(p, 'pnl', 'PnL', 'Pnl', 'NetPnL', 'netPnl', 'unrealizedPnl') || 0);
+        const side = val(p, 'side', 'Side', 'Direction', 'direction');
+        const sym = val(p, 'symbol', 'Symbol', 'Instrument', 'instrument');
+        const qty = val(p, 'quantity', 'Quantity', 'Qty', 'qty', 'Size', 'size');
+        const entry = val(p, 'entryPrice', 'EntryPrice', 'AvgPrice', 'avgPrice', 'averagePrice');
+        const acct = val(p, 'accountId', 'AccountId', 'accountName', 'AccountName');
+        totalPnl += pnl;
+        return `<tr>
+          <td>${accountName(acct)}</td>
+          <td><strong>${sym}</strong></td>
+          <td class="${sideClass(side)}">${sideText(side)}</td>
+          <td>${qty}</td>
+          <td>${entry}</td>
+          <td class="${pnlClass(pnl)}">${pnlText(pnl)}</td>
+          <td><button class="btn sm danger" onclick="closePosition('${acct}','${sym}',${qty})">平仓</button></td>
+        </tr>`;
+      }).join('');
+    const el = $('totalPnl');
+    el.textContent = pnlText(totalPnl);
+    el.className = 'value ' + (totalPnl >= 0 ? 'positive' : 'negative');
+  } catch(e) { debugLog('positions error', e.message); }
+}
+
+async function loadOrders() {
+  try {
+    const data = await api('/positions/orders');
+    const orders = data.orders || data.Orders || [];
+    $('orderCount').textContent = orders.length;
+    $('orderBody').innerHTML = orders.length === 0
+      ? '<tr><td colspan="7" class="empty">暂无挂单</td></tr>'
+      : orders.map(o => {
+        const acct = val(o, 'accountId', 'AccountId', 'accountName', 'AccountName');
+        const sym = val(o, 'symbol', 'Symbol', 'Instrument');
+        const side = val(o, 'side', 'Side', 'Direction');
+        const qty = val(o, 'quantity', 'Quantity', 'Qty');
+        const price = val(o, 'price', 'Price', 'LimitPrice', 'limitPrice', 'StopPrice');
+        const type = val(o, 'type', 'Type', 'orderType', 'OrderType');
+        const oid = val(o, 'orderId', 'OrderId', 'id', 'Id');
+        return `<tr>
+          <td>${accountName(acct)}</td>
+          <td><strong>${sym}</strong></td>
+          <td>${sideText(side)}</td>
+          <td>${qty}</td>
+          <td>${price}</td>
+          <td>${type}</td>
+          <td><button class="btn sm" onclick="cancelOrder('${acct}','${oid}')">撤单</button></td>
+        </tr>`;
+      }).join('');
+  } catch(e) { debugLog('orders error', e.message); }
+}
+
+async function loadClosed() {
+  try {
+    const data = await api('/positions/closed');
+    const closed = data.closedPositions || data.ClosedPositions || data.positions || [];
+    $('closedCount').textContent = closed.length;
+    $('closedBody').innerHTML = closed.length === 0
+      ? '<tr><td colspan="6" class="empty">今日暂无平仓记录</td></tr>'
+      : closed.map(p => {
+        const acct = val(p, 'accountId', 'AccountId', 'accountName', 'AccountName');
+        const sym = val(p, 'symbol', 'Symbol', 'Instrument');
+        const side = val(p, 'side', 'Side', 'Direction');
+        const qty = val(p, 'quantity', 'Quantity', 'Qty');
+        const entry = val(p, 'entryPrice', 'EntryPrice', 'AvgPrice');
+        const pnl = Number(val(p, 'pnl', 'PnL', 'Pnl', 'NetPnL', 'netPnl') || 0);
+        return `<tr>
+          <td>${accountName(acct)}</td>
+          <td><strong>${sym}</strong></td>
+          <td class="${sideClass(side)}">${sideText(side)}</td>
+          <td>${qty}</td>
+          <td>${entry}</td>
+          <td class="${pnlClass(pnl)}">${pnlText(pnl)}</td>
+        </tr>`;
+      }).join('');
+  } catch(e) { debugLog('closed error', e.message); }
+}
+
+async function loadLockouts() {
+  try {
+    const data = await api('/risk/lockouts');
+    const locked = data.lockedAccounts || [];
+    $('lockedCount').textContent = locked.length;
+    $('lockedCount').className = 'value' + (locked.length > 0 ? ' negative' : '');
+  } catch(e) { debugLog('lockouts error', e.message); }
+}
+
+async function loadStats() {
+  try {
+    const data = await api('/historical/trades/stats');
+    const o = data.overview || {};
+    const d = data.daily || {};
+    const s = data.streaks || {};
+    $('statsGrid').innerHTML = `
+      <div class="stat-card"><div class="label">总交易数</div><div class="value">${o.totalTrades || 0}</div></div>
+      <div class="stat-card"><div class="label">胜率</div><div class="value">${(o.winRate || 0).toFixed(1)}%</div></div>
+      <div class="stat-card"><div class="label">净盈亏</div><div class="value ${pnlClass(o.netPnl || 0)}">${pnlText(o.netPnl || 0)}</div></div>
+      <div class="stat-card"><div class="label">盈亏比</div><div class="value">${(o.profitFactor || 0).toFixed(2)}</div></div>
+      <div class="stat-card"><div class="label">平均盈利</div><div class="value pnl-pos">${pnlText(o.avgWin || 0)}</div></div>
+      <div class="stat-card"><div class="label">平均亏损</div><div class="value pnl-neg">${pnlText(o.avgLoss || 0)}</div></div>
+      <div class="stat-card"><div class="label">最大盈利</div><div class="value pnl-pos">${pnlText(o.largestWin || 0)}</div></div>
+      <div class="stat-card"><div class="label">最大亏损</div><div class="value pnl-neg">${pnlText(o.largestLoss || 0)}</div></div>
+      <div class="stat-card"><div class="label">���胜</div><div class="value">${s.longestWinStreak || 0}</div></div>
+      <div class="stat-card"><div class="label">连亏</div><div class="value">${s.longestLossStreak || 0}</div></div>
+      <div class="stat-card"><div class="label">盈利天数</div><div class="value">${d.profitableDays || 0} / ${d.totalDays || 0}</div></div>
+      <div class="stat-card"><div class="label">日均盈亏</div><div class="value ${pnlClass(d.avgDailyPnl || 0)}">${pnlText(d.avgDailyPnl || 0)}</div></div>
+    `;
+  } catch(e) { debugLog('stats error', e.message); }
+}
+
+async function refreshAll() {
+  try {
+    await loadConnections();
+    await Promise.all([loadPositions(), loadOrders(), loadClosed(), loadLockouts()]);
+    $('apiDot').className = 'dot on';
+    $('lastUpdate').textContent = new Date().toLocaleTimeString('en-US', {hour12:false});
+  } catch(e) {
+    $('apiDot').className = 'dot off';
+    debugLog('refresh failed', e.message);
+  }
+}
+
+function toggleAutoRefresh() {
+  if ($('autoRefresh').checked) {
+    refreshTimer = setInterval(refreshAll, CONFIG.REFRESH_INTERVAL);
+  } else {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+function confirmFlatten() { $('flattenModal').classList.add('show'); }
+function closeFlattenModal() { $('flattenModal').classList.remove('show'); }
+
+async function executeFlatten() {
+  closeFlattenModal();
+  try {
+    await apiPost('/positions/flatten');
+    setTimeout(refreshAll, 1000);
+  } catch(e) { alert('全平失败: ' + e.message); }
+}
+
+async function closePosition(accountId, symbol, quantity) {
+  if (!confirm(`确认平仓 ${symbol} (${accountName(accountId)})?`)) return;
+  try {
+    await apiPost('/positions/close', {accountId, symbol, quantity});
+    setTimeout(refreshAll, 1000);
+  } catch(e) { alert('平仓���败: ' + e.message); }
+}
+
+async function cancelOrder(accountId, orderId) {
+  if (!confirm('确认撤销此挂单?')) return;
+  try {
+    await apiPost('/positions/cancel', {accountId, orderId});
+    setTimeout(refreshAll, 1000);
+  } catch(e) { alert('撤单失败: ' + e.message); }
+}
+
+refreshAll();
+loadStats();
+toggleAutoRefresh();
+</script>
+</body>
+</html>
