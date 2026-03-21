@@ -553,24 +553,60 @@ function loadAccountDetails() {
   } catch(e) { debugLog('accountDetails error', e.message); }
 }
 
-async function loadHistoryAccounts() {
-  try {
-    const data = await api('/historical/accounts');
-    const accounts = data.accounts || [];
-    const sel = $('hAccount');
-    accounts.sort((a, b) => (a.Name || '').localeCompare(b.Name || ''));
-    accounts.forEach(a => {
-      const opt = document.createElement('option');
-      opt.value = a.Id;
-      opt.textContent = a.Name || a.Id;
-      sel.appendChild(opt);
-    });
-  } catch(e) { debugLog('historyAccounts error', e.message); }
+function loadHistoryAccounts() {
+  const sel = $('hAccount');
+  const existing = new Set();
+  sel.querySelectorAll('option').forEach(o => { if (o.value) existing.add(o.value); });
+  const accounts = [];
+  Object.entries(connectionMap).forEach(([id, name]) => {
+    if (!existing.has(id) && /^\d+$/.test(id)) accounts.push({id, name});
+  });
+  accounts.sort((a, b) => a.name.localeCompare(b.name));
+  accounts.forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.id;
+    opt.textContent = a.name;
+    sel.appendChild(opt);
+  });
 }
 
 let hPage = 1;
 let hTotal = 0;
 let hLimit = 50;
+
+function renderTradeRow(t) {
+  const pnl = Number(val(t, 'NetPnL', 'netPnl', 'pnl', 'PnL') || 0);
+  const entryTime = val(t, 'EntryTime', 'entryTime') || '';
+  const exitTime = val(t, 'ExitTime', 'exitTime') || '';
+  const entry = entryTime.replace('T',' ').slice(0,19);
+  const acctId = val(t, 'AccountId', 'accountId');
+  const acctName = val(t, 'AccountName', 'accountName') || accountName(acctId);
+  const sym = val(t, 'Symbol', 'symbol');
+  const side = val(t, 'Side', 'side');
+  const qty = val(t, 'Quantity', 'quantity');
+  const ep = val(t, 'EntryPrice', 'entryPrice');
+  const xp = val(t, 'ExitPrice', 'exitPrice');
+  const hi = Number(val(t, 'HighestURPnL', 'highestURPnL') || 0);
+  const lo = Number(val(t, 'LowestURPnL', 'lowestURPnL') || 0);
+  let dur = '';
+  if (entryTime && exitTime) {
+    dur = formatDuration((new Date(exitTime) - new Date(entryTime)) / 1000);
+  }
+  return `<tr>
+    <td style="white-space:nowrap">${entry}</td>
+    <td>${acctName}</td>
+    <td><strong>${sym}</strong></td>
+    <td class="${sideClass(side)}">${sideText(side)}</td>
+    <td>${qty}</td>
+    <td>${ep}</td>
+    <td>${xp || '--'}</td>
+    <td class="${pnlClass(pnl)}">${pnlText(pnl)}</td>
+    <td class="pnl-pos">${hi ? '+' + hi.toFixed(0) : '--'}</td>
+    <td class="pnl-neg">${lo ? lo.toFixed(0) : '--'}</td>
+    <td>${dur}</td>
+  </tr>`;
+}
+
 async function loadHistory(reset) {
   try {
     if (reset) hPage = 1;
@@ -581,35 +617,29 @@ async function loadHistory(reset) {
     const trades = data.trades || [];
     const pg = data.pagination || {};
     hTotal = pg.total || 0;
+
+    let todayRows = '';
+    let todayCount = 0;
+    if (hPage === 1 && lastClosedData.length > 0) {
+      let todayTrades = lastClosedData.filter(p => val(p, 'IsClosed', 'isClosed'));
+      if (acct) todayTrades = todayTrades.filter(p => val(p, 'AccountId', 'accountId') === acct);
+      todayTrades.sort((a, b) => {
+        const ta = val(a, 'ExitTime', 'exitTime') || '';
+        const tb = val(b, 'ExitTime', 'exitTime') || '';
+        return tb.localeCompare(ta);
+      });
+      todayCount = todayTrades.length;
+      todayRows = todayTrades.map(renderTradeRow).join('');
+    }
+
+    const totalAll = hTotal + todayCount;
     const totalPages = pg.totalPages || 1;
-    $('hPageInfo').textContent = `第 ${hPage} / ${totalPages} 页 (共 ${hTotal} 条)`;
+    $('hPageInfo').textContent = `第 ${hPage} / ${totalPages} 页 (共 ${totalAll} 条)`;
     $('hPrev').disabled = hPage <= 1;
     $('hNext').disabled = !pg.hasMore;
-    $('historyBody').innerHTML = trades.length === 0
-      ? '<tr><td colspan="11" class="empty">暂无交易记录</td></tr>'
-      : trades.map(t => {
-        const pnl = Number(t.NetPnL || 0);
-        const side = normSide(t.Side);
-        const entry = (t.EntryTime || '').replace('T',' ').slice(0,19);
-        let dur = '';
-        if (t.EntryTime && t.ExitTime) {
-          const sec = (new Date(t.ExitTime) - new Date(t.EntryTime)) / 1000;
-          dur = formatDuration(sec);
-        }
-        return `<tr>
-          <td style="white-space:nowrap">${entry}</td>
-          <td>${t.AccountName || t.AccountId}</td>
-          <td><strong>${t.Symbol}</strong></td>
-          <td class="${sideClass(t.Side)}">${sideText(t.Side)}</td>
-          <td>${t.Quantity}</td>
-          <td>${t.EntryPrice}</td>
-          <td>${t.ExitPrice || '--'}</td>
-          <td class="${pnlClass(pnl)}">${pnlText(pnl)}</td>
-          <td class="pnl-pos">${t.HighestURPnL ? '+' + Number(t.HighestURPnL).toFixed(0) : '--'}</td>
-          <td class="pnl-neg">${t.LowestURPnL ? Number(t.LowestURPnL).toFixed(0) : '--'}</td>
-          <td>${dur}</td>
-        </tr>`;
-      }).join('');
+
+    const histRows = trades.map(renderTradeRow).join('');
+    $('historyBody').innerHTML = (todayRows + histRows) || '<tr><td colspan="11" class="empty">暂无交易记录</td></tr>';
   } catch(e) { debugLog('history error', e.message); }
 }
 function historyPrev() { if (hPage > 1) { hPage--; loadHistory(); } }
@@ -715,10 +745,11 @@ async function cancelOrder(accountId, orderId) {
   } catch(e) { alert('撤单失败: ' + e.message); }
 }
 
-refreshAll();
+refreshAll().then(() => {
+  loadHistoryAccounts();
+  loadHistory(true);
+});
 loadStats();
-loadHistoryAccounts();
-loadHistory(true);
 toggleAutoRefresh();
 </script>
 </body>
