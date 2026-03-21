@@ -203,6 +203,7 @@ tbody tr:hover{background:var(--hover)}
     <input type="date" id="hDateFrom" class="filter-input">
     <input type="date" id="hDateTo" class="filter-input">
     <select id="hSide" class="filter-input"><option value="">全部方向</option><option value="Buy">多</option><option value="Sell">空</option></select>
+    <select id="hAccount" class="filter-input"><option value="">全部账户</option></select>
     <input type="text" id="hSymbol" placeholder="合约" class="filter-input" style="width:80px">
     <button class="btn" onclick="loadHistory(true)">查询</button>
   </div>
@@ -557,6 +558,21 @@ function loadAccountDetails() {
   } catch(e) { debugLog('accountDetails error', e.message); }
 }
 
+async function loadHistoryAccounts() {
+  try {
+    const data = await api('/historical/accounts');
+    const accounts = data.accounts || [];
+    const sel = $('hAccount');
+    accounts.sort((a, b) => (a.Name || '').localeCompare(b.Name || ''));
+    accounts.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.Id;
+      opt.textContent = a.Name || a.Id;
+      sel.appendChild(opt);
+    });
+  } catch(e) { debugLog('historyAccounts error', e.message); }
+}
+
 let hPage = 1;
 let hTotal = 0;
 let hLimit = 50;
@@ -566,11 +582,13 @@ async function loadHistory(reset) {
     const from = $('hDateFrom').value;
     const to = $('hDateTo').value;
     const side = $('hSide').value;
+    const acct = $('hAccount').value;
     const sym = $('hSymbol').value;
     let qs = `?limit=${hLimit}&page=${hPage}&sort=entry_time&order=desc`;
     if (from) qs += '&dateFrom=' + from;
     if (to) qs += '&dateTo=' + to;
     if (side) qs += '&side=' + side;
+    if (acct) qs += '&account=' + acct;
     if (sym) qs += '&symbol=' + sym;
     const data = await api('/historical/trades' + qs);
     const trades = data.trades || [];
@@ -712,6 +730,7 @@ async function cancelOrder(accountId, orderId) {
 
 refreshAll();
 loadStats();
+loadHistoryAccounts();
 loadHistory(true);
 toggleAutoRefresh();
 </script>
