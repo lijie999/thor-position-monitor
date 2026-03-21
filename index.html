@@ -522,11 +522,16 @@ function loadAccountDetails() {
     const closedData = lastClosedData || [];
     const runningData = lastRunningData || [];
 
+    Object.entries(connectionMap).forEach(([id, name]) => {
+      if (/^\d+$/.test(id)) {
+        acctMap[id] = { name: name, balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
+      }
+    });
+
     closedData.forEach(p => {
       const aid = val(p, 'AccountId', 'accountId');
       if (!aid) return;
-      if (!acctMap[aid]) acctMap[aid] = { name: '', balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
-      acctMap[aid].name = accountName(aid);
+      if (!acctMap[aid]) acctMap[aid] = { name: accountName(aid), balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
       const bal = Number(val(p, 'AccountBalance', 'accountBalance') || 0);
       const exitTime = val(p, 'ExitTime', 'exitTime') || '';
       if (!acctMap[aid]._lastExit || exitTime > acctMap[aid]._lastExit) {
@@ -539,8 +544,7 @@ function loadAccountDetails() {
     runningData.forEach(p => {
       const aid = val(p, 'AccountId', 'accountId');
       if (!aid) return;
-      if (!acctMap[aid]) acctMap[aid] = { name: '', balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
-      acctMap[aid].name = accountName(aid);
+      if (!acctMap[aid]) acctMap[aid] = { name: accountName(aid), balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
       acctMap[aid].openPnl += Number(val(p, 'NetPnL', 'netPnl', 'pnl', 'PnL') || 0);
       acctMap[aid].openCount += 1;
     });
