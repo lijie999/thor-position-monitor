@@ -189,7 +189,7 @@ tbody tr:hover{background:var(--hover)}
 <div class="panel" id="panel-accounts">
   <div class="table-wrap">
     <table><thead><tr>
-      <th>账户</th><th>账户名</th><th>累计盈亏</th><th>总交易</th><th>胜率</th><th>今日已平</th><th>持仓数</th><th>持仓盈亏</th>
+      <th>账户</th><th>账户名</th><th>余额</th><th>累计盈亏</th><th>总交易</th><th>胜率</th><th>今日已平</th><th>持仓数</th><th>持仓盈亏</th>
     </tr></thead><tbody id="accountBody"></tbody></table>
   </div>
 </div>
@@ -540,7 +540,7 @@ function loadAccountDetails() {
     Object.entries(connectionMap).forEach(([id, name]) => {
       if (/^\d+$/.test(id)) {
         const st = accountStatsCache[id] || {};
-        acctMap[id] = { name, netPnl: st.netPnl || 0, totalTrades: st.totalTrades || 0, winRate: st.winRate || 0, closedPnl: 0, openPnl: 0, openCount: 0 };
+        acctMap[id] = { name, netPnl: st.netPnl || 0, totalTrades: st.totalTrades || 0, winRate: st.winRate || 0, balance: 0, closedPnl: 0, openPnl: 0, openCount: 0, _lastExit: '' };
       }
     });
 
@@ -548,6 +548,12 @@ function loadAccountDetails() {
       const aid = val(p, 'AccountId', 'accountId');
       if (!aid || !acctMap[aid]) return;
       acctMap[aid].closedPnl += Number(val(p, 'NetPnL', 'netPnl', 'pnl', 'PnL') || 0);
+      const bal = Number(val(p, 'AccountBalance', 'accountBalance') || 0);
+      const exitTime = val(p, 'ExitTime', 'exitTime') || '';
+      if (bal > 0 && exitTime > acctMap[aid]._lastExit) {
+        acctMap[aid].balance = bal;
+        acctMap[aid]._lastExit = exitTime;
+      }
     });
 
     runningData.forEach(p => {
@@ -555,15 +561,18 @@ function loadAccountDetails() {
       if (!aid || !acctMap[aid]) return;
       acctMap[aid].openPnl += Number(val(p, 'NetPnL', 'netPnl', 'pnl', 'PnL') || 0);
       acctMap[aid].openCount += 1;
+      const bal = Number(val(p, 'AccountBalance', 'accountBalance') || 0);
+      if (bal > 0) acctMap[aid].balance = bal;
     });
 
     const rows = Object.entries(acctMap).sort((a, b) => a[1].name.localeCompare(b[1].name));
     $('accountBody').innerHTML = rows.length === 0
-      ? '<tr><td colspan="8" class="empty">暂无账户数据</td></tr>'
+      ? '<tr><td colspan="9" class="empty">暂无账户数据</td></tr>'
       : rows.map(([aid, a]) => {
         return `<tr>
           <td>${aid}</td>
           <td>${a.name}</td>
+          <td>${a.balance > 0 ? '$' + a.balance.toFixed(2) : '--'}</td>
           <td class="${pnlClass(a.netPnl)}">${a.totalTrades > 0 ? pnlText(a.netPnl) : '--'}</td>
           <td>${a.totalTrades || '--'}</td>
           <td>${a.totalTrades > 0 ? a.winRate.toFixed(1) + '%' : '--'}</td>
