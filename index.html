@@ -189,7 +189,7 @@ tbody tr:hover{background:var(--hover)}
 <div class="panel" id="panel-accounts">
   <div class="table-wrap">
     <table><thead><tr>
-      <th>账户</th><th>账户名</th><th>余额</th><th>今日盈亏</th><th>持仓数</th><th>持仓盈亏</th>
+      <th>账户</th><th>账户名</th><th>累计盈亏</th><th>总交易</th><th>胜率</th><th>今日已平</th><th>持仓数</th><th>持仓盈亏</th>
     </tr></thead><tbody id="accountBody"></tbody></table>
   </div>
 </div>
@@ -516,6 +516,21 @@ async function loadLockouts() {
   } catch(e) { debugLog('lockouts error', e.message); }
 }
 
+let accountStatsCache = {};
+let accountStatsLoaded = false;
+
+async function loadAccountStats() {
+  if (accountStatsLoaded) return;
+  const ids = Object.keys(connectionMap).filter(id => /^\d+$/.test(id));
+  for (const id of ids) {
+    try {
+      const d = await api('/historical/trades/stats?account=' + id);
+      accountStatsCache[id] = { netPnl: d.netPnl || 0, totalTrades: d.totalTrades || 0, winRate: d.winRate || 0 };
+    } catch(e) { accountStatsCache[id] = { netPnl: 0, totalTrades: 0, winRate: 0 }; }
+  }
+  accountStatsLoaded = true;
+}
+
 function loadAccountDetails() {
   try {
     const acctMap = {};
@@ -524,42 +539,36 @@ function loadAccountDetails() {
 
     Object.entries(connectionMap).forEach(([id, name]) => {
       if (/^\d+$/.test(id)) {
-        acctMap[id] = { name: name, balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
+        const st = accountStatsCache[id] || {};
+        acctMap[id] = { name, netPnl: st.netPnl || 0, totalTrades: st.totalTrades || 0, winRate: st.winRate || 0, closedPnl: 0, openPnl: 0, openCount: 0 };
       }
     });
 
     closedData.forEach(p => {
       const aid = val(p, 'AccountId', 'accountId');
-      if (!aid) return;
-      if (!acctMap[aid]) acctMap[aid] = { name: accountName(aid), balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
-      const bal = Number(val(p, 'AccountBalance', 'accountBalance') || 0);
-      const exitTime = val(p, 'ExitTime', 'exitTime') || '';
-      if (!acctMap[aid]._lastExit || exitTime > acctMap[aid]._lastExit) {
-        acctMap[aid].balance = bal;
-        acctMap[aid]._lastExit = exitTime;
-      }
+      if (!aid || !acctMap[aid]) return;
       acctMap[aid].closedPnl += Number(val(p, 'NetPnL', 'netPnl', 'pnl', 'PnL') || 0);
     });
 
     runningData.forEach(p => {
       const aid = val(p, 'AccountId', 'accountId');
-      if (!aid) return;
-      if (!acctMap[aid]) acctMap[aid] = { name: accountName(aid), balance: 0, closedPnl: 0, openPnl: 0, openCount: 0 };
+      if (!aid || !acctMap[aid]) return;
       acctMap[aid].openPnl += Number(val(p, 'NetPnL', 'netPnl', 'pnl', 'PnL') || 0);
       acctMap[aid].openCount += 1;
     });
 
-    const rows = Object.entries(acctMap).sort((a, b) => a[0].localeCompare(b[0]));
+    const rows = Object.entries(acctMap).sort((a, b) => a[1].name.localeCompare(b[1].name));
     $('accountBody').innerHTML = rows.length === 0
-      ? '<tr><td colspan="6" class="empty">暂无账户数据</td></tr>'
+      ? '<tr><td colspan="8" class="empty">暂无账户数据</td></tr>'
       : rows.map(([aid, a]) => {
-        const todayPnl = a.closedPnl + a.openPnl;
         return `<tr>
           <td>${aid}</td>
           <td>${a.name}</td>
-          <td>${a.balance > 0 ? '$' + a.balance.toFixed(2) : '--'}</td>
-          <td class="${pnlClass(todayPnl)}">${pnlText(todayPnl)}</td>
-          <td>${a.openCount}</td>
+          <td class="${pnlClass(a.netPnl)}">${a.totalTrades > 0 ? pnlText(a.netPnl) : '--'}</td>
+          <td>${a.totalTrades || '--'}</td>
+          <td>${a.totalTrades > 0 ? a.winRate.toFixed(1) + '%' : '--'}</td>
+          <td class="${pnlClass(a.closedPnl)}">${a.closedPnl !== 0 ? pnlText(a.closedPnl) : '--'}</td>
+          <td>${a.openCount || '--'}</td>
           <td class="${pnlClass(a.openPnl)}">${a.openCount > 0 ? pnlText(a.openPnl) : '--'}</td>
         </tr>`;
       }).join('');
@@ -761,6 +770,7 @@ async function cancelOrder(accountId, orderId) {
 refreshAll().then(() => {
   loadHistoryAccounts();
   loadHistory(true);
+  loadAccountStats().then(loadAccountDetails);
 });
 loadStats();
 toggleAutoRefresh();
