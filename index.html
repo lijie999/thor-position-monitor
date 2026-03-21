@@ -200,12 +200,7 @@ tbody tr:hover{background:var(--hover)}
 
 <div class="panel" id="panel-history">
   <div class="history-filters">
-    <input type="date" id="hDateFrom" class="filter-input">
-    <input type="date" id="hDateTo" class="filter-input">
-    <select id="hSide" class="filter-input"><option value="">全部方向</option><option value="Buy">多</option><option value="Sell">空</option></select>
-    <select id="hAccount" class="filter-input"><option value="">全部账户</option></select>
-    <input type="text" id="hSymbol" placeholder="合约" class="filter-input" style="width:80px">
-    <button class="btn" onclick="loadHistory(true)">查询</button>
+    <select id="hAccount" class="filter-input" onchange="loadHistory(true)"><option value="">全部账户</option></select>
   </div>
   <div class="table-wrap" style="max-height:65vh">
     <table><thead><tr>
@@ -579,17 +574,9 @@ let hLimit = 50;
 async function loadHistory(reset) {
   try {
     if (reset) hPage = 1;
-    const from = $('hDateFrom').value;
-    const to = $('hDateTo').value;
-    const side = $('hSide').value;
     const acct = $('hAccount').value;
-    const sym = $('hSymbol').value;
     let qs = `?limit=${hLimit}&page=${hPage}&sort=entry_time&order=desc`;
-    if (from) qs += '&dateFrom=' + from;
-    if (to) qs += '&dateTo=' + to;
-    if (side) qs += '&side=' + side;
     if (acct) qs += '&account=' + acct;
-    if (sym) qs += '&symbol=' + sym;
     const data = await api('/historical/trades' + qs);
     const trades = data.trades || [];
     const pg = data.pagination || {};
