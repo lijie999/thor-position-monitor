@@ -88,6 +88,13 @@ tbody tr:hover{background:var(--hover)}
 .more-toggle:hover{color:var(--text)}
 .summary-extra{padding-top:0;margin-top:-4px}
 
+.history-filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.filter-input{padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);
+  color:var(--text);font-size:13px}
+.filter-input:focus{outline:none;border-color:var(--blue)}
+.history-pager{display:flex;gap:12px;align-items:center;justify-content:center;padding:12px;
+  font-size:13px;color:var(--text-dim)}
+
 @media(max-width:600px){
   .header{flex-direction:column;gap:8px;text-align:center}
   .header .status{justify-content:center;flex-wrap:wrap}
@@ -142,6 +149,7 @@ tbody tr:hover{background:var(--hover)}
   <div class="tab" data-tab="orders">挂单</div>
   <div class="tab" data-tab="closed">今日已平</div>
   <div class="tab" data-tab="accounts">账户明细</div>
+  <div class="tab" data-tab="history">历史交易</div>
   <div class="tab" data-tab="connections">连接</div>
   <div class="tab" data-tab="stats">统计</div>
 </div>
@@ -188,6 +196,26 @@ tbody tr:hover{background:var(--hover)}
 
 <div class="panel" id="panel-connections">
   <div class="conn-grid" id="connGrid"></div>
+</div>
+
+<div class="panel" id="panel-history">
+  <div class="history-filters">
+    <input type="date" id="hDateFrom" class="filter-input">
+    <input type="date" id="hDateTo" class="filter-input">
+    <select id="hSide" class="filter-input"><option value="">全部方向</option><option value="Buy">多</option><option value="Sell">空</option></select>
+    <input type="text" id="hSymbol" placeholder="合约" class="filter-input" style="width:80px">
+    <button class="btn" onclick="loadHistory(true)">查询</button>
+  </div>
+  <div class="table-wrap" style="max-height:65vh">
+    <table><thead><tr>
+      <th>时间</th><th>账户</th><th>合约</th><th>方向</th><th>数量</th><th>入场</th><th>出场</th><th>盈亏</th><th>最大浮盈</th><th>最大浮亏</th><th>持仓时长</th>
+    </tr></thead><tbody id="historyBody"></tbody></table>
+  </div>
+  <div class="history-pager">
+    <button class="btn" id="hPrev" onclick="historyPrev()" disabled>上一页</button>
+    <span id="hPageInfo">--</span>
+    <button class="btn" id="hNext" onclick="historyNext()">下一页</button>
+  </div>
 </div>
 
 <div class="panel" id="panel-stats">
@@ -529,6 +557,59 @@ function loadAccountDetails() {
   } catch(e) { debugLog('accountDetails error', e.message); }
 }
 
+let hPage = 1;
+let hTotal = 0;
+let hLimit = 50;
+async function loadHistory(reset) {
+  try {
+    if (reset) hPage = 1;
+    const from = $('hDateFrom').value;
+    const to = $('hDateTo').value;
+    const side = $('hSide').value;
+    const sym = $('hSymbol').value;
+    let qs = `?limit=${hLimit}&page=${hPage}&sort=entry_time&order=desc`;
+    if (from) qs += '&dateFrom=' + from;
+    if (to) qs += '&dateTo=' + to;
+    if (side) qs += '&side=' + side;
+    if (sym) qs += '&symbol=' + sym;
+    const data = await api('/historical/trades' + qs);
+    const trades = data.trades || [];
+    const pg = data.pagination || {};
+    hTotal = pg.total || 0;
+    const totalPages = pg.totalPages || 1;
+    $('hPageInfo').textContent = `第 ${hPage} / ${totalPages} 页 (共 ${hTotal} 条)`;
+    $('hPrev').disabled = hPage <= 1;
+    $('hNext').disabled = !pg.hasMore;
+    $('historyBody').innerHTML = trades.length === 0
+      ? '<tr><td colspan="11" class="empty">暂无交易记录</td></tr>'
+      : trades.map(t => {
+        const pnl = Number(t.NetPnL || 0);
+        const side = normSide(t.Side);
+        const entry = (t.EntryTime || '').replace('T',' ').slice(0,19);
+        let dur = '';
+        if (t.EntryTime && t.ExitTime) {
+          const sec = (new Date(t.ExitTime) - new Date(t.EntryTime)) / 1000;
+          dur = formatDuration(sec);
+        }
+        return `<tr>
+          <td style="white-space:nowrap">${entry}</td>
+          <td>${t.AccountName || t.AccountId}</td>
+          <td><strong>${t.Symbol}</strong></td>
+          <td class="${sideClass(t.Side)}">${sideText(t.Side)}</td>
+          <td>${t.Quantity}</td>
+          <td>${t.EntryPrice}</td>
+          <td>${t.ExitPrice || '--'}</td>
+          <td class="${pnlClass(pnl)}">${pnlText(pnl)}</td>
+          <td class="pnl-pos">${t.HighestURPnL ? '+' + Number(t.HighestURPnL).toFixed(0) : '--'}</td>
+          <td class="pnl-neg">${t.LowestURPnL ? Number(t.LowestURPnL).toFixed(0) : '--'}</td>
+          <td>${dur}</td>
+        </tr>`;
+      }).join('');
+  } catch(e) { debugLog('history error', e.message); }
+}
+function historyPrev() { if (hPage > 1) { hPage--; loadHistory(); } }
+function historyNext() { hPage++; loadHistory(); }
+
 async function loadStats() {
   try {
     const d = await api('/historical/trades/stats');
@@ -631,6 +712,7 @@ async function cancelOrder(accountId, orderId) {
 
 refreshAll();
 loadStats();
+loadHistory(true);
 toggleAutoRefresh();
 </script>
 </body>
