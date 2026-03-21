@@ -248,6 +248,15 @@ let closedPnl = 0;
 let lastClosedData = [];
 let lastRunningData = [];
 
+function localTime(utcStr) {
+  if (!utcStr) return '';
+  const d = new Date(utcStr.endsWith('Z') ? utcStr : utcStr + 'Z');
+  if (isNaN(d)) return utcStr;
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
+    + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+
 function debugLog(label, data) {
   console.log('[Thor]', label, data);
   const el = document.getElementById('debugPanel');
@@ -578,7 +587,7 @@ function renderTradeRow(t) {
   const pnl = Number(val(t, 'NetPnL', 'netPnl', 'pnl', 'PnL') || 0);
   const entryTime = val(t, 'EntryTime', 'entryTime') || '';
   const exitTime = val(t, 'ExitTime', 'exitTime') || '';
-  const entry = entryTime.replace('T',' ').slice(0,19);
+  const entry = localTime(entryTime);
   const acctId = val(t, 'AccountId', 'accountId');
   const acctName = val(t, 'AccountName', 'accountName') || accountName(acctId);
   const sym = val(t, 'Symbol', 'symbol');
