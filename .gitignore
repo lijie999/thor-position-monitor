@@ -3,3 +3,7 @@ config.js
 node_modules/
 .wrangler/
 dist/
+copier/.venv/
+copier/trades.db
+copier/config.py
+__pycache__/
