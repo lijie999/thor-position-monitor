@@ -17,8 +17,7 @@ def init_db():
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS trades (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            thor_account_id TEXT NOT NULL,
-            thor_symbol TEXT NOT NULL,
+            symbol TEXT NOT NULL,
             ib_symbol TEXT,
             side TEXT NOT NULL,
             quantity INTEGER NOT NULL,
@@ -34,7 +33,12 @@ def init_db():
             updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status);
-        CREATE INDEX IF NOT EXISTS idx_trades_thor ON trades(thor_account_id, thor_symbol, status);
+        CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol, status);
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
     """)
     conn.close()
 
@@ -43,14 +47,28 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-def open_trade(thor_account_id, thor_symbol, ib_symbol, side, quantity, entry_price, ib_order_id):
+def get_setting(key, default=None):
+    conn = get_conn()
+    row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    conn.close()
+    return row['value'] if row else default
+
+
+def set_setting(key, value):
+    conn = get_conn()
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+    conn.commit()
+    conn.close()
+
+
+def open_trade(symbol, ib_symbol, side, quantity, entry_price, ib_order_id):
     conn = get_conn()
     ts = now_iso()
     conn.execute(
         """INSERT INTO trades
-           (thor_account_id, thor_symbol, ib_symbol, side, quantity, entry_price, entry_time, ib_order_id, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)""",
-        (thor_account_id, thor_symbol, ib_symbol, side, quantity, entry_price, ts, ib_order_id, ts, ts)
+           (symbol, ib_symbol, side, quantity, entry_price, entry_time, ib_order_id, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)""",
+        (symbol, ib_symbol, side, quantity, entry_price, ts, ib_order_id, ts, ts)
     )
     conn.commit()
     trade_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -77,21 +95,42 @@ def get_open_trades():
     return [dict(r) for r in rows]
 
 
-def find_open_trade(thor_account_id, thor_symbol):
+def find_open_trade_by_symbol(symbol):
     conn = get_conn()
     row = conn.execute(
-        "SELECT * FROM trades WHERE thor_account_id=? AND thor_symbol=? AND status='open' LIMIT 1",
-        (thor_account_id, thor_symbol)
+        "SELECT * FROM trades WHERE symbol=? AND status='open' LIMIT 1", (symbol,)
     ).fetchone()
     conn.close()
     return dict(row) if row else None
 
 
-def get_all_trades(limit=100):
+def get_all_trades(limit=200):
     conn = get_conn()
     rows = conn.execute("SELECT * FROM trades ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
+def get_trade_stats():
+    conn = get_conn()
+    total = conn.execute("SELECT COUNT(*) as c FROM trades WHERE status='closed'").fetchone()['c']
+    wins = conn.execute("SELECT COUNT(*) as c FROM trades WHERE status='closed' AND pnl > 0").fetchone()['c']
+    losses = conn.execute("SELECT COUNT(*) as c FROM trades WHERE status='closed' AND pnl < 0").fetchone()['c']
+    gross_win = conn.execute("SELECT COALESCE(SUM(pnl), 0) as s FROM trades WHERE status='closed' AND pnl > 0").fetchone()['s']
+    gross_loss = conn.execute("SELECT COALESCE(SUM(pnl), 0) as s FROM trades WHERE status='closed' AND pnl < 0").fetchone()['s']
+    net_pnl = conn.execute("SELECT COALESCE(SUM(pnl), 0) as s FROM trades WHERE status='closed'").fetchone()['s']
+    open_count = conn.execute("SELECT COUNT(*) as c FROM trades WHERE status='open'").fetchone()['c']
+    conn.close()
+    return {
+        'total': total, 'wins': wins, 'losses': losses,
+        'win_rate': round(wins / total * 100, 1) if total > 0 else 0,
+        'gross_win': gross_win, 'gross_loss': gross_loss, 'net_pnl': net_pnl,
+        'profit_factor': round(gross_win / abs(gross_loss), 2) if gross_loss != 0 else 0,
+        'avg_win': round(gross_win / wins, 2) if wins > 0 else 0,
+        'avg_loss': round(gross_loss / losses, 2) if losses > 0 else 0,
+        'open_count': open_count,
+    }
+
+
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 init_db()

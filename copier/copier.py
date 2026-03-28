@@ -1,7 +1,7 @@
 import time
 import logging
 import signal
-import sys
+import json
 
 import config
 import thor_api
@@ -17,6 +17,9 @@ logging.basicConfig(
 log = logging.getLogger('copier')
 
 running = True
+copier_enabled = True
+fixed_quantity = 1
+ibkr_connected = False
 
 
 def handle_signal(sig, frame):
@@ -29,58 +32,92 @@ signal.signal(signal.SIGINT, handle_signal)
 signal.signal(signal.SIGTERM, handle_signal)
 
 
-def build_thor_position_key(pos):
-    account_id = pos.get('AccountId', pos.get('accountId', ''))
-    symbol = pos.get('Symbol', pos.get('symbol', ''))
-    return f"{account_id}:{symbol}"
+def load_settings():
+    global copier_enabled, fixed_quantity
+    enabled = db.get_setting('copier_enabled', 'true')
+    copier_enabled = enabled.lower() in ('true', '1', 'yes')
+    fixed_quantity = int(db.get_setting('fixed_quantity', str(config.FIXED_QUANTITY)))
+
+
+def get_status():
+    return {
+        'running': running,
+        'copier_enabled': copier_enabled,
+        'fixed_quantity': fixed_quantity,
+        'ibkr_connected': ibkr_connected,
+        'ibkr_port': config.IBKR_PORT,
+        'mode': 'PAPER' if config.IBKR_PORT in (4002, 7497) else 'LIVE',
+    }
+
+
+def aggregate_thor_positions(positions):
+    agg = {}
+    for p in positions:
+        symbol = p.get('Symbol', p.get('symbol', ''))
+        side = p.get('Side', p.get('side', 0))
+        action = thor_side_to_action(side)
+        key = f"{symbol}:{action}"
+        if key not in agg:
+            agg[key] = {
+                'symbol': symbol,
+                'action': action,
+                'total_qty': 0,
+                'entry_price': float(p.get('EntryPrice', p.get('entryPrice', 0))),
+            }
+        agg[key]['total_qty'] += int(p.get('Quantity', p.get('quantity', 0)))
+    return agg
+
+
+def try_connect_ibkr():
+    global ibkr_connected
+    try:
+        ibkr.connect()
+        ibkr_connected = True
+    except Exception as e:
+        ibkr_connected = False
+        log.error(f"IBKR connection failed: {e}")
 
 
 def sync_positions():
+    if not copier_enabled:
+        return
+    if not ibkr_connected:
+        try_connect_ibkr()
+        if not ibkr_connected:
+            return
+
     try:
         thor_positions = thor_api.get_running_positions()
     except Exception as e:
         log.error(f"Thor API error: {e}")
         return
 
-    thor_map = {}
-    for p in thor_positions:
-        key = build_thor_position_key(p)
-        account_id = p.get('AccountId', p.get('accountId', ''))
-        symbol = p.get('Symbol', p.get('symbol', ''))
-        side = p.get('Side', p.get('side', 0))
-        qty = int(p.get('Quantity', p.get('quantity', 0)))
-        entry_price = float(p.get('EntryPrice', p.get('entryPrice', 0)))
-        thor_map[key] = {
-            'account_id': account_id,
-            'symbol': symbol,
-            'side': side,
-            'quantity': qty,
-            'entry_price': entry_price,
-        }
+    thor_agg = aggregate_thor_positions(thor_positions)
 
     open_trades = db.get_open_trades()
-    open_trade_keys = set()
-    for trade in open_trades:
-        key = f"{trade['thor_account_id']}:{trade['thor_symbol']}"
-        open_trade_keys.add(key)
+    open_trade_symbols = set()
 
-        if key not in thor_map:
-            log.info(f"CLOSE: Thor position gone -> {key}")
+    for trade in open_trades:
+        key = f"{trade['symbol']}:{trade['side']}"
+        open_trade_symbols.add(key)
+
+        if key not in thor_agg:
+            log.info(f"CLOSE: Thor position gone -> {trade['symbol']} {trade['side']}")
             try:
-                parsed = parse_thor_symbol(trade['thor_symbol'])
+                parsed = parse_thor_symbol(trade['symbol'])
                 if not parsed:
-                    log.error(f"Unknown symbol: {trade['thor_symbol']}")
+                    log.error(f"Unknown symbol: {trade['symbol']}")
                     continue
                 contract = ibkr.make_contract(parsed['ib_symbol'], parsed['exchange'], parsed['contract_month'])
                 close_action = opposite_action(trade['side'])
                 ib_trade = ibkr.place_order(contract, close_action, trade['quantity'])
                 db.close_trade(trade['id'], 0, 0, ib_trade.order.orderId)
-                log.info(f"CLOSED trade #{trade['id']} via IBKR order {ib_trade.order.orderId}")
+                log.info(f"CLOSED #{trade['id']} via IBKR order {ib_trade.order.orderId}")
             except Exception as e:
-                log.error(f"Failed to close trade #{trade['id']}: {e}")
+                log.error(f"Failed to close #{trade['id']}: {e}")
 
-    for key, pos in thor_map.items():
-        if key in open_trade_keys:
+    for key, pos in thor_agg.items():
+        if key in open_trade_symbols:
             continue
 
         parsed = parse_thor_symbol(pos['symbol'])
@@ -88,39 +125,38 @@ def sync_positions():
             log.warning(f"Unknown symbol {pos['symbol']}, skipping")
             continue
 
-        action = thor_side_to_action(pos['side'])
-        log.info(f"OPEN: New Thor position -> {key} {action} {pos['quantity']}x {pos['symbol']}")
+        qty = fixed_quantity
+        log.info(f"OPEN: {pos['action']} {qty}x {pos['symbol']} (Thor total: {pos['total_qty']})")
 
         try:
             contract = ibkr.make_contract(parsed['ib_symbol'], parsed['exchange'], parsed['contract_month'])
-            ib_trade = ibkr.place_order(contract, action, pos['quantity'])
+            ib_trade = ibkr.place_order(contract, pos['action'], qty)
             trade_id = db.open_trade(
-                thor_account_id=pos['account_id'],
-                thor_symbol=pos['symbol'],
+                symbol=pos['symbol'],
                 ib_symbol=parsed['ib_symbol'],
-                side=action,
-                quantity=pos['quantity'],
+                side=pos['action'],
+                quantity=qty,
                 entry_price=pos['entry_price'],
                 ib_order_id=ib_trade.order.orderId,
             )
-            log.info(f"OPENED trade #{trade_id} via IBKR order {ib_trade.order.orderId}")
+            log.info(f"OPENED #{trade_id} via IBKR order {ib_trade.order.orderId}")
         except Exception as e:
-            log.error(f"Failed to open trade for {key}: {e}")
+            log.error(f"Failed to open {pos['symbol']}: {e}")
 
 
-def main():
+def run_loop():
+    global running
     log.info("=" * 50)
-    log.info("Thor -> IBKR Copier starting")
-    log.info(f"IBKR: {config.IBKR_HOST}:{config.IBKR_PORT} ({'PAPER' if config.IBKR_PORT == 4002 else 'LIVE'})")
-    log.info(f"Poll interval: {config.POLL_INTERVAL}s")
+    log.info("Thor -> IBKR Copier")
+    log.info(f"IBKR: {config.IBKR_HOST}:{config.IBKR_PORT} ({'PAPER' if config.IBKR_PORT in (4002, 7497) else 'LIVE'})")
+    log.info(f"Fixed quantity: {fixed_quantity}")
+    log.info(f"Copier enabled: {copier_enabled}")
     log.info("=" * 50)
 
-    ibkr.connect()
-
-    log.info(f"Open trades in DB: {len(db.get_open_trades())}")
-    log.info("Monitoring Thor positions...")
+    try_connect_ibkr()
 
     while running:
+        load_settings()
         sync_positions()
         for _ in range(config.POLL_INTERVAL * 10):
             if not running:
@@ -132,4 +168,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    run_loop()

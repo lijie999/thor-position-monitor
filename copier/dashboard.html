@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thor Copier 管理台</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--text-dim:#8b949e;--green:#3fb950;--red:#f85149;--blue:#58a6ff;--yellow:#d29922;--hover:#1f2937}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border)}
+.header h1{font-size:18px;font-weight:600}
+.header .status{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--text-dim)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot.on{background:var(--green)}.dot.off{background:var(--red)}
+
+.controls{display:flex;gap:16px;padding:16px 20px;align-items:center;flex-wrap:wrap;background:var(--surface);border-bottom:1px solid var(--border)}
+.control-group{display:flex;align-items:center;gap:8px}
+.control-group label{font-size:13px;color:var(--text-dim)}
+.switch{position:relative;width:44px;height:24px}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:24px;transition:.2s}
+.slider:before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+input:checked+.slider{background:var(--green)}
+input:checked+.slider:before{transform:translateX(20px)}
+.qty-input{width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:14px;text-align:center}
+.btn{padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:13px}
+.btn:hover{background:var(--hover)}
+.mode-badge{padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700}
+.mode-badge.paper{background:#0d3321;color:var(--green)}
+.mode-badge.live{background:#3d1418;color:var(--red)}
+
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;padding:16px 20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px}
+.card .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+.card .value{font-size:20px;font-weight:700;margin-top:4px}
+.positive{color:var(--green)}.negative{color:var(--red)}
+
+.section{padding:12px 20px}
+.section h3{font-size:14px;margin-bottom:8px;color:var(--text-dim)}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:auto;max-height:40vh}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{text-align:left;padding:6px 10px;color:var(--text-dim);font-size:11px;text-transform:uppercase;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface)}
+tbody td{padding:6px 10px;border-bottom:1px solid var(--border)}
+tbody tr:hover{background:var(--hover)}
+.pnl-pos{color:var(--green)}.pnl-neg{color:var(--red)}
+.side-buy{color:var(--green);font-weight:600}.side-sell{color:var(--red);font-weight:600}
+.empty{text-align:center;padding:30px;color:var(--text-dim)}
+
+@media(max-width:600px){
+  .header{flex-direction:column;gap:8px}
+  .controls{flex-direction:column;align-items:flex-start}
+  .summary{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Thor Copier 管理台</h1>
+  <div class="status">
+    <span>IBKR: <span class="dot off" id="ibkrDot"></span> <span id="ibkrStatus">--</span></span>
+    <span id="modeLabel"></span>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="control-group">
+    <label>跟单开关</label>
+    <label class="switch"><input type="checkbox" id="enableToggle" onchange="saveSettings()"><span class="slider"></span></label>
+  </div>
+  <div class="control-group">
+    <label>固定手数</label>
+    <input type="number" class="qty-input" id="qtyInput" min="1" max="100" value="1" onchange="saveSettings()">
+  </div>
+  <div class="control-group">
+    <button class="btn" onclick="refresh()">刷新</button>
+  </div>
+</div>
+
+<div class="summary" id="statsPanel">
+  <div class="card"><div class="label">净盈亏</div><div class="value" id="netPnl">--</div></div>
+  <div class="card"><div class="label">总交易</div><div class="value" id="totalTrades">--</div></div>
+  <div class="card"><div class="label">胜率</div><div class="value" id="winRate">--</div></div>
+  <div class="card"><div class="label">盈利因子</div><div class="value" id="profitFactor">--</div></div>
+  <div class="card"><div class="label">平均盈利</div><div class="value" id="avgWin">--</div></div>
+  <div class="card"><div class="label">平均亏损</div><div class="value" id="avgLoss">--</div></div>
+  <div class="card"><div class="label">当前持仓</div><div class="value" id="openCount">--</div></div>
+</div>
+
+<div class="section">
+  <h3>当前持仓</h3>
+  <div class="table-wrap">
+    <table><thead><tr>
+      <th>合约</th><th>方向</th><th>数量</th><th>入场价</th><th>入场时间</th><th>IBKR订单</th>
+    </tr></thead><tbody id="openBody"></tbody></table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>历史订单</h3>
+  <div class="table-wrap" style="max-height:50vh">
+    <table><thead><tr>
+      <th>合约</th><th>方向</th><th>数量</th><th>入场价</th><th>出场价</th><th>盈亏</th><th>入场时间</th><th>出场时间</th>
+    </tr></thead><tbody id="historyBody"></tbody></table>
+  </div>
+</div>
+
+<script>
+const API = '';
+function pnl(v) { v = Number(v); return (v >= 0 ? '+' : '') + v.toFixed(2); }
+function pnlCls(v) { return Number(v) >= 0 ? 'pnl-pos' : 'pnl-neg'; }
+function localTime(s) {
+  if (!s) return '';
+  const d = new Date(s.endsWith('Z') ? s : s + 'Z');
+  if (isNaN(d)) return s;
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch(API + '/api/status');
+    const d = await r.json();
+    document.getElementById('ibkrDot').className = 'dot ' + (d.ibkr_connected ? 'on' : 'off');
+    document.getElementById('ibkrStatus').textContent = d.ibkr_connected ? '已连接' : '未连接';
+    const ml = document.getElementById('modeLabel');
+    ml.innerHTML = `<span class="mode-badge ${d.mode.toLowerCase()}">${d.mode}</span>`;
+  } catch(e) {}
+}
+
+async function loadSettings() {
+  try {
+    const r = await fetch(API + '/api/settings');
+    const d = await r.json();
+    document.getElementById('enableToggle').checked = d.copier_enabled === 'true';
+    document.getElementById('qtyInput').value = d.fixed_quantity;
+  } catch(e) {}
+}
+
+async function saveSettings() {
+  const enabled = document.getElementById('enableToggle').checked;
+  const qty = parseInt(document.getElementById('qtyInput').value) || 1;
+  await fetch(API + '/api/settings', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({copier_enabled: String(enabled), fixed_quantity: String(qty)})
+  });
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch(API + '/api/trades/stats');
+    const d = await r.json();
+    const np = document.getElementById('netPnl');
+    np.textContent = pnl(d.net_pnl); np.className = 'value ' + pnlCls(d.net_pnl);
+    document.getElementById('totalTrades').textContent = d.total;
+    document.getElementById('winRate').textContent = d.win_rate + '%';
+    document.getElementById('profitFactor').textContent = d.profit_factor;
+    const aw = document.getElementById('avgWin');
+    aw.textContent = pnl(d.avg_win); aw.className = 'value positive';
+    const al = document.getElementById('avgLoss');
+    al.textContent = pnl(d.avg_loss); al.className = 'value negative';
+    document.getElementById('openCount').textContent = d.open_count;
+  } catch(e) {}
+}
+
+async function loadOpenTrades() {
+  try {
+    const r = await fetch(API + '/api/trades/open');
+    const trades = await r.json();
+    document.getElementById('openBody').innerHTML = trades.length === 0
+      ? '<tr><td colspan="6" class="empty">暂无持仓</td></tr>'
+      : trades.map(t => `<tr>
+          <td><strong>${t.symbol}</strong></td>
+          <td class="side-${t.side.toLowerCase()}">${t.side === 'BUY' ? '多' : '空'}</td>
+          <td>${t.quantity}</td>
+          <td>${t.entry_price || '--'}</td>
+          <td>${localTime(t.entry_time)}</td>
+          <td>${t.ib_order_id || '--'}</td>
+        </tr>`).join('');
+  } catch(e) {}
+}
+
+async function loadHistory() {
+  try {
+    const r = await fetch(API + '/api/trades/history');
+    const trades = await r.json();
+    const closed = trades.filter(t => t.status === 'closed');
+    document.getElementById('historyBody').innerHTML = closed.length === 0
+      ? '<tr><td colspan="8" class="empty">暂无历史订单</td></tr>'
+      : closed.map(t => `<tr>
+          <td><strong>${t.symbol}</strong></td>
+          <td class="side-${t.side.toLowerCase()}">${t.side === 'BUY' ? '多' : '空'}</td>
+          <td>${t.quantity}</td>
+          <td>${t.entry_price || '--'}</td>
+          <td>${t.exit_price || '--'}</td>
+          <td class="${pnlCls(t.pnl)}">${t.pnl !== null ? pnl(t.pnl) : '--'}</td>
+          <td>${localTime(t.entry_time)}</td>
+          <td>${localTime(t.exit_time)}</td>
+        </tr>`).join('');
+  } catch(e) {}
+}
+
+async function refresh() {
+  await Promise.all([loadStatus(), loadSettings(), loadStats(), loadOpenTrades(), loadHistory()]);
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>
