@@ -34,12 +34,8 @@ def connect():
 
     ib.accountValueEvent += _on_account_value
     ib.updatePortfolioEvent += _on_portfolio
-
-    accts = ib.managedAccounts()
-    if accts:
-        ib.reqAccountUpdates(subscribe=True, account=accts[0])
-        ib.sleep(2)
-        log.info(f"Subscribed to account updates: {accts[0]}")
+    ib.sleep(1)
+    log.info(f"Subscribed to account updates")
 
 
 def disconnect():
