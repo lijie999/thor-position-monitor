@@ -61,6 +61,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 })
             except Exception as e:
                 self._json({'error': str(e)}, 500)
+        elif self.path == '/api/ibkr/positions':
+            try:
+                import ibkr
+                portfolio = ibkr.get_portfolio()
+                positions = []
+                for item in portfolio:
+                    positions.append({
+                        'symbol': item.contract.localSymbol or item.contract.symbol,
+                        'secType': item.contract.secType,
+                        'quantity': item.position,
+                        'avg_cost': item.averageCost,
+                        'market_price': item.marketPrice,
+                        'market_value': item.marketValue,
+                        'unrealized_pnl': item.unrealizedPNL,
+                        'realized_pnl': item.realizedPNL,
+                    })
+                self._json(positions)
+            except Exception as e:
+                self._json({'error': str(e)}, 500)
         else:
             self.send_response(404)
             self.end_headers()

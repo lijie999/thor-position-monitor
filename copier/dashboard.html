@@ -103,7 +103,16 @@ tbody tr:hover{background:var(--hover)}
 </div>
 
 <div class="section">
-  <h3>当前持仓</h3>
+  <h3>IBKR 持仓</h3>
+  <div class="table-wrap">
+    <table><thead><tr>
+      <th>合约</th><th>类型</th><th>数量</th><th>均价</th><th>市价</th><th>市值</th><th>浮动盈亏</th><th>已实现盈亏</th>
+    </tr></thead><tbody id="ibkrPosBody"></tbody></table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>跟单持仓</h3>
   <div class="table-wrap">
     <table><thead><tr>
       <th>合约</th><th>方向</th><th>数量</th><th>入场价</th><th>入场时间</th><th>IBKR订单</th>
@@ -244,8 +253,33 @@ async function loadAccount() {
   } catch(e) {}
 }
 
+async function loadIbkrPositions() {
+  try {
+    const r = await fetch(API + '/api/ibkr/positions');
+    const positions = await r.json();
+    if (positions.error) return;
+    document.getElementById('ibkrPosBody').innerHTML = positions.length === 0
+      ? '<tr><td colspan="8" class="empty">暂无持仓</td></tr>'
+      : positions.map(p => {
+        const qty = Number(p.quantity);
+        const sideClass = qty > 0 ? 'side-buy' : 'side-sell';
+        const sideText = qty > 0 ? '多' : '空';
+        return `<tr>
+          <td><strong>${p.symbol}</strong></td>
+          <td>${p.secType}</td>
+          <td class="${sideClass}">${sideText} ${Math.abs(qty)}</td>
+          <td>${fmtUsd(p.avg_cost)}</td>
+          <td>${fmtUsd(p.market_price)}</td>
+          <td>${fmtUsd(p.market_value)}</td>
+          <td class="${pnlCls(p.unrealized_pnl)}">${pnl(p.unrealized_pnl)}</td>
+          <td class="${pnlCls(p.realized_pnl)}">${pnl(p.realized_pnl)}</td>
+        </tr>`;
+      }).join('');
+  } catch(e) {}
+}
+
 async function refresh() {
-  await Promise.all([loadStatus(), loadSettings(), loadStats(), loadOpenTrades(), loadHistory(), loadAccount()]);
+  await Promise.all([loadStatus(), loadSettings(), loadStats(), loadOpenTrades(), loadHistory(), loadAccount(), loadIbkrPositions()]);
 }
 
 refresh();
