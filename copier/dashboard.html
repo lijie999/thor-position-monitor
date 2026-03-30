@@ -78,6 +78,20 @@ tbody tr:hover{background:var(--hover)}
   </div>
 </div>
 
+<div class="section" style="padding-bottom:0">
+  <h3>IBKR 账户概要 <span id="acctId" style="font-weight:400;color:var(--text-dim)"></span></h3>
+</div>
+<div class="summary" id="acctPanel">
+  <div class="card"><div class="label">净资产</div><div class="value" id="acctNLV">--</div></div>
+  <div class="card"><div class="label">可用资金</div><div class="value" id="acctAvail">--</div></div>
+  <div class="card"><div class="label">现金</div><div class="value" id="acctCash">--</div></div>
+  <div class="card"><div class="label">购买力</div><div class="value" id="acctBP">--</div></div>
+  <div class="card"><div class="label">未实现盈亏</div><div class="value" id="acctUPnL">--</div></div>
+  <div class="card"><div class="label">已实现盈亏</div><div class="value" id="acctRPnL">--</div></div>
+  <div class="card"><div class="label">持仓市值</div><div class="value" id="acctGPV">--</div></div>
+  <div class="card"><div class="label">维持保证金</div><div class="value" id="acctMargin">--</div></div>
+</div>
+
 <div class="summary" id="statsPanel">
   <div class="card"><div class="label">净盈亏</div><div class="value" id="netPnl">--</div></div>
   <div class="card"><div class="label">总交易</div><div class="value" id="totalTrades">--</div></div>
@@ -202,8 +216,36 @@ async function loadHistory() {
   } catch(e) {}
 }
 
+function fmtUsd(v) {
+  if (!v || v === '--') return '--';
+  const n = Number(v);
+  if (isNaN(n)) return v;
+  return '$' + n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+async function loadAccount() {
+  try {
+    const r = await fetch(API + '/api/account');
+    const d = await r.json();
+    if (d.error) return;
+    document.getElementById('acctId').textContent = d.account || '';
+    document.getElementById('acctNLV').textContent = fmtUsd(d.net_liquidation);
+    document.getElementById('acctAvail').textContent = fmtUsd(d.available_funds);
+    document.getElementById('acctCash').textContent = fmtUsd(d.total_cash);
+    document.getElementById('acctBP').textContent = fmtUsd(d.buying_power);
+    const upnl = document.getElementById('acctUPnL');
+    upnl.textContent = d.unrealized_pnl !== '--' ? pnl(d.unrealized_pnl) : '--';
+    upnl.className = 'value ' + (d.unrealized_pnl !== '--' ? pnlCls(d.unrealized_pnl) : '');
+    const rpnl = document.getElementById('acctRPnL');
+    rpnl.textContent = d.realized_pnl !== '--' ? pnl(d.realized_pnl) : '--';
+    rpnl.className = 'value ' + (d.realized_pnl !== '--' ? pnlCls(d.realized_pnl) : '');
+    document.getElementById('acctGPV').textContent = fmtUsd(d.gross_position_value);
+    document.getElementById('acctMargin').textContent = fmtUsd(d.maintenance_margin);
+  } catch(e) {}
+}
+
 async function refresh() {
-  await Promise.all([loadStatus(), loadSettings(), loadStats(), loadOpenTrades(), loadHistory()]);
+  await Promise.all([loadStatus(), loadSettings(), loadStats(), loadOpenTrades(), loadHistory(), loadAccount()]);
 }
 
 refresh();

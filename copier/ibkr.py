@@ -48,3 +48,30 @@ def get_positions():
 
 def get_portfolio():
     return ib.portfolio()
+
+
+def get_account_summary():
+    if not ib.isConnected():
+        return {}
+    ib.reqAccountSummary()
+    ib.sleep(1)
+    summary = ib.accountSummary()
+    result = {}
+    for item in summary:
+        result[item.tag] = item.value
+    ib.cancelAccountSummary()
+    return result
+
+
+def get_account_values():
+    if not ib.isConnected():
+        return {}
+    accts = ib.managedAccounts()
+    if not accts:
+        return {}
+    vals = ib.accountValues(accts[0])
+    result = {}
+    for v in vals:
+        if v.currency in ('USD', ''):
+            result[v.tag] = v.value
+    return result

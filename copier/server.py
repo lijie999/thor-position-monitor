@@ -44,6 +44,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json(db.get_all_trades(500))
         elif self.path == '/api/trades/stats':
             self._json(db.get_trade_stats())
+        elif self.path == '/api/account':
+            try:
+                import ibkr
+                vals = ibkr.get_account_values()
+                self._json({
+                    'account': ibkr.ib.managedAccounts()[0] if ibkr.ib.managedAccounts() else '--',
+                    'net_liquidation': vals.get('NetLiquidation', '--'),
+                    'total_cash': vals.get('TotalCashValue', '--'),
+                    'unrealized_pnl': vals.get('UnrealizedPnL', '--'),
+                    'realized_pnl': vals.get('RealizedPnL', '--'),
+                    'buying_power': vals.get('BuyingPower', '--'),
+                    'available_funds': vals.get('AvailableFunds', '--'),
+                    'maintenance_margin': vals.get('MaintMarginReq', '--'),
+                    'gross_position_value': vals.get('GrossPositionValue', '--'),
+                })
+            except Exception as e:
+                self._json({'error': str(e)}, 500)
         else:
             self.send_response(404)
             self.end_headers()
