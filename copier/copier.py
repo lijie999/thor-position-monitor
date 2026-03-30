@@ -164,7 +164,10 @@ def run_loop():
         for _ in range(config.POLL_INTERVAL * 10):
             if not running:
                 break
-            time.sleep(0.1)
+            if ibkr_connected:
+                ibkr.ib.sleep(0.1)
+            else:
+                time.sleep(0.1)
 
     ibkr.disconnect()
     log.info("Copier stopped")

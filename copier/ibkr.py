@@ -11,6 +11,18 @@ import logging
 log = logging.getLogger('ibkr')
 
 ib = IB()
+_account_cache = {}
+_portfolio_cache = []
+
+
+def _on_account_value(value):
+    if value.currency in ('USD', ''):
+        _account_cache[value.tag] = value.value
+
+
+def _on_portfolio(item):
+    global _portfolio_cache
+    _portfolio_cache = list(ib.portfolio())
 
 
 def connect():
@@ -19,6 +31,15 @@ def connect():
     ib.RequestTimeout = 30
     ib.connect(config.IBKR_HOST, config.IBKR_PORT, clientId=config.IBKR_CLIENT_ID, readonly=False, timeout=30)
     log.info(f"IBKR connected: {config.IBKR_HOST}:{config.IBKR_PORT}")
+
+    ib.accountValueEvent += _on_account_value
+    ib.updatePortfolioEvent += _on_portfolio
+
+    accts = ib.managedAccounts()
+    if accts:
+        ib.reqAccountUpdates(subscribe=True, account=accts[0])
+        ib.sleep(2)
+        log.info(f"Subscribed to account updates: {accts[0]}")
 
 
 def disconnect():
@@ -47,31 +68,8 @@ def get_positions():
 
 
 def get_portfolio():
-    return ib.portfolio()
-
-
-def get_account_summary():
-    if not ib.isConnected():
-        return {}
-    ib.reqAccountSummary()
-    ib.sleep(1)
-    summary = ib.accountSummary()
-    result = {}
-    for item in summary:
-        result[item.tag] = item.value
-    ib.cancelAccountSummary()
-    return result
+    return _portfolio_cache or list(ib.portfolio())
 
 
 def get_account_values():
-    if not ib.isConnected():
-        return {}
-    accts = ib.managedAccounts()
-    if not accts:
-        return {}
-    vals = ib.accountValues(accts[0])
-    result = {}
-    for v in vals:
-        if v.currency in ('USD', ''):
-            result[v.tag] = v.value
-    return result
+    return dict(_account_cache)
