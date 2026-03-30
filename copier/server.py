@@ -80,6 +80,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json(positions)
             except Exception as e:
                 self._json({'error': str(e)}, 500)
+        elif self.path == '/api/debug/account_raw':
+            try:
+                import ibkr
+                self._json(ibkr.get_account_values())
+            except Exception as e:
+                self._json({'error': str(e)}, 500)
         else:
             self.send_response(404)
             self.end_headers()
