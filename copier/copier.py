@@ -93,8 +93,11 @@ def sync_positions():
         return
 
     thor_agg = aggregate_thor_positions(thor_positions)
-
     open_trades = db.get_open_trades()
+
+    if thor_agg or open_trades:
+        log.info(f"Thor signals: {len(thor_agg)}, DB open: {len(open_trades)}")
+
     open_trade_symbols = set()
 
     for trade in open_trades:
