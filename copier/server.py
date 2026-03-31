@@ -48,12 +48,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 import ibkr
                 vals = ibkr.get_account_values()
+                portfolio = ibkr.get_portfolio()
+                pos_upnl = sum(item.unrealizedPNL for item in portfolio)
+                pos_rpnl = sum(item.realizedPNL for item in portfolio)
                 self._json({
                     'account': ibkr.ib.managedAccounts()[0] if ibkr.ib.managedAccounts() else '--',
                     'net_liquidation': vals.get('NetLiquidation', '--'),
                     'total_cash': vals.get('TotalCashValue', '--'),
-                    'unrealized_pnl': vals.get('UnrealizedPnL', '--'),
-                    'realized_pnl': vals.get('RealizedPnL', '--'),
+                    'unrealized_pnl': pos_upnl,
+                    'realized_pnl': pos_rpnl,
+                    'daily_pnl': vals.get('DailyPnL', '--'),
                     'buying_power': vals.get('BuyingPower', '--'),
                     'available_funds': vals.get('AvailableFunds', '--'),
                     'maintenance_margin': vals.get('MaintMarginReq', '--'),

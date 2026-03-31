@@ -83,11 +83,11 @@ tbody tr:hover{background:var(--hover)}
 </div>
 <div class="summary" id="acctPanel">
   <div class="card"><div class="label">净资产</div><div class="value" id="acctNLV">--</div></div>
-  <div class="card"><div class="label">可用资金</div><div class="value" id="acctAvail">--</div></div>
-  <div class="card"><div class="label">现金</div><div class="value" id="acctCash">--</div></div>
-  <div class="card"><div class="label">购买力</div><div class="value" id="acctBP">--</div></div>
+  <div class="card"><div class="label">今日盈亏</div><div class="value" id="acctDaily">--</div></div>
   <div class="card"><div class="label">未实现盈亏</div><div class="value" id="acctUPnL">--</div></div>
   <div class="card"><div class="label">已实现盈亏</div><div class="value" id="acctRPnL">--</div></div>
+  <div class="card"><div class="label">可用资金</div><div class="value" id="acctAvail">--</div></div>
+  <div class="card"><div class="label">购买力</div><div class="value" id="acctBP">--</div></div>
   <div class="card"><div class="label">持仓市值</div><div class="value" id="acctGPV">--</div></div>
   <div class="card"><div class="label">维持保证金</div><div class="value" id="acctMargin">--</div></div>
 </div>
@@ -239,8 +239,10 @@ async function loadAccount() {
     if (d.error) return;
     document.getElementById('acctId').textContent = d.account || '';
     document.getElementById('acctNLV').textContent = fmtUsd(d.net_liquidation);
+    const daily = document.getElementById('acctDaily');
+    daily.textContent = d.daily_pnl !== '--' ? pnl(d.daily_pnl) : '--';
+    daily.className = 'value ' + (d.daily_pnl !== '--' ? pnlCls(d.daily_pnl) : '');
     document.getElementById('acctAvail').textContent = fmtUsd(d.available_funds);
-    document.getElementById('acctCash').textContent = fmtUsd(d.total_cash);
     document.getElementById('acctBP').textContent = fmtUsd(d.buying_power);
     const upnl = document.getElementById('acctUPnL');
     upnl.textContent = d.unrealized_pnl !== '--' ? pnl(d.unrealized_pnl) : '--';
